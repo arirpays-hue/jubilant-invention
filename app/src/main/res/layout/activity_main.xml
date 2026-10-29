@@ -12,6 +12,7 @@
         android:orientation="vertical"
         android:padding="20dp">
 
+        <!-- כותרת עליונה ומתג הפעלה -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/cardHeader"
             android:layout_width="match_parent"
@@ -67,6 +68,7 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- כרטיסיית בקרת ווליום המאוחדת 0% - 200% -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -89,47 +91,120 @@
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
-                    <TextView
+                    <LinearLayout
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="הגברת עוצמה (Max Gain)"
-                        android:textColor="#A0AAB8"
-                        android:textSize="15sp"
-                        android:textStyle="bold" />
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="עוצמת שמע כוללת (עד 200%)"
+                            android:textColor="#FFFFFF"
+                            android:textSize="16sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvSubBoostInfo"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="מערכת: 100% | תוספת: +0.0 dB"
+                            android:textColor="#A0AAB8"
+                            android:textSize="12sp" />
+                    </LinearLayout>
 
                     <TextView
-                        android:id="@+id/tvBoostValue"
+                        android:id="@+id/tvTotalVolume"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="+0.0 dB (0%)"
+                        android:text="100%"
                         android:textColor="#00E676"
-                        android:textSize="22sp"
+                        android:textSize="28sp"
                         android:textStyle="bold" />
                 </LinearLayout>
 
                 <ProgressBar
-                    android:id="@+id/progressBoost"
+                    android:id="@+id/progressTotalVolume"
                     style="?android:attr/progressBarStyleHorizontal"
                     android:layout_width="match_parent"
-                    android:layout_height="8dp"
-                    android:layout_marginTop="12dp"
-                    android:max="100"
-                    android:progress="0"
+                    android:layout_height="10dp"
+                    android:layout_marginTop="14dp"
+                    android:max="200"
+                    android:progress="100"
                     android:progressTint="#00E676"
                     android:progressBackgroundTint="#263042" />
 
                 <SeekBar
-                    android:id="@+id/seekBoost"
+                    android:id="@+id/seekTotalVolume"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:max="100"
+                    android:layout_marginTop="12dp"
+                    android:max="200"
+                    android:progress="100"
                     android:progressTint="#00E676"
                     android:thumbTint="#00E676" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:gravity="center"
+                    android:text="💡 טיפ: לחץ על כפתורי הווליום בטלפון כדי לעבור את ה-100%"
+                    android:textColor="#00E5FF"
+                    android:textSize="12sp" />
+
+                <!-- כפתורי קפיצה מהירה -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnVol100"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_marginEnd="6dp"
+                        android:layout_weight="1"
+                        android:text="100% רגיל"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11sp"
+                        app:cornerRadius="12dp"
+                        app:strokeColor="#3A465E" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnVol150"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_marginEnd="6dp"
+                        android:layout_weight="1"
+                        android:text="150% מוגבר"
+                        android:textColor="#FFD740"
+                        android:textSize="11sp"
+                        app:cornerRadius="12dp"
+                        app:strokeColor="#FFD740" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnVol200"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_weight="1"
+                        android:text="200% MAX"
+                        android:textColor="#FF5252"
+                        android:textSize="11sp"
+                        app:cornerRadius="12dp"
+                        app:strokeColor="#FF5252" />
+                </LinearLayout>
+
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- כרטיסיית אפקטים: באס וסראונד -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -223,6 +298,7 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- פרופילים מוכנים -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -290,6 +366,7 @@
                 app:strokeColor="#00E676" />
         </LinearLayout>
 
+        <!-- כרטיסיית אקולייזר 5 ערוצים -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -325,3 +402,4 @@
 
     </LinearLayout>
 </ScrollView>
+ 
