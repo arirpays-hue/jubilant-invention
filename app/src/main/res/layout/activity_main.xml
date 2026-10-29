@@ -17,11 +17,11 @@
             android:id="@+id/cardHeader"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="20dp"
+            android:layout_marginBottom="16dp"
             app:cardBackgroundColor="#161B26"
             app:cardCornerRadius="24dp"
             app:cardElevation="8dp"
-            app:strokeColor="#263042"
+            app:strokeColor="#00E676"
             app:strokeWidth="1dp">
 
             <LinearLayout
@@ -43,16 +43,15 @@
                         android:text="SOUND BOOSTER PRO"
                         android:textColor="#FFFFFF"
                         android:textSize="20sp"
-                        android:textStyle="bold"
-                        android:letterSpacing="0.05" />
+                        android:textStyle="bold" />
 
                     <TextView
                         android:id="@+id/tvStatus"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="מנוע סאונד כבוי ●"
-                        android:textColor="#FF5252"
+                        android:text="מנוע סאונד מוכן ●"
+                        android:textColor="#00E676"
                         android:textSize="13sp"
                         android:textStyle="bold" />
                 </LinearLayout>
@@ -61,10 +60,56 @@
                     android:id="@+id/switchEnable"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:checked="true"
                     android:scaleX="1.3"
                     android:scaleY="1.3"
                     app:thumbTint="#00E676"
                     app:trackTint="#2E3B4E" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- כרטיסיית הפעלת מחוון מערכת (השתלטות על כפתורי הווליום מכל מקום) -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="20dp"
+            app:cardBackgroundColor="#1A2234"
+            app:cardCornerRadius="20dp"
+            app:strokeColor="#00E5FF"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="שדרוג מחוון הווליום של הטלפון (עד 200%)"
+                    android:textColor="#00E5FF"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="מאפשר להגביר עד 200% עם כפתורי הווליום הפיזיים מכל מסך ומשחק בטלפון."
+                    android:textColor="#D0D8E8"
+                    android:textSize="12sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnEnableSystemSlider"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="10dp"
+                    android:backgroundTint="#00E5FF"
+                    android:text="הפעל מחוון ווליום מערכתי בהגדרות"
+                    android:textColor="#0B0E14"
+                    android:textStyle="bold"
+                    app:cornerRadius="12dp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
@@ -146,16 +191,6 @@
                     android:progressTint="#00E676"
                     android:thumbTint="#00E676" />
 
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:gravity="center"
-                    android:text="💡 טיפ: לחץ על כפתורי הווליום בטלפון כדי לעבור את ה-100%"
-                    android:textColor="#00E5FF"
-                    android:textSize="12sp" />
-
-                <!-- כפתורי קפיצה מהירה -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -402,4 +437,3 @@
 
     </LinearLayout>
 </ScrollView>
- 
