@@ -1,167 +1,328 @@
-package com.example.soundbooster
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0B0E14"
+    android:fillViewport="true">
 
-import android.graphics.Color
-import android.media.audiofx.BassBoost
-import android.media.audiofx.Equalizer
-import android.media.audiofx.LoudnessEnhancer
-import android.media.audiofx.Virtualizer
-import android.os.Bundle
-import android.widget.Button
-import android.widget.LinearLayout
-import android.widget.SeekBar
-import android.widget.Switch
-import android.widget.TextView
-import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
 
-class MainActivity : AppCompatActivity() {
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardHeader"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="20dp"
+            app:cardBackgroundColor="#161B26"
+            app:cardCornerRadius="24dp"
+            app:cardElevation="8dp"
+            app:strokeColor="#263042"
+            app:strokeWidth="1dp">
 
-    private var loudnessEnhancer: LoudnessEnhancer? = null
-    private var equalizer: Equalizer? = null
-    private var bassBoost: BassBoost? = null
-    private var virtualizer: Virtualizer? = null
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="20dp">
 
-    private val eqSliders = mutableListOf<SeekBar>()
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="SOUND BOOSTER PRO"
+                        android:textColor="#FFFFFF"
+                        android:textSize="20sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.05" />
 
-        initAudioEffects()
-        setupUI()
-    }
+                    <TextView
+                        android:id="@+id/tvStatus"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="מנוע סאונד כבוי ●"
+                        android:textColor="#FF5252"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
 
-    private fun initAudioEffects() {
-        try {
-            // סשן 0 מחיל את האפקטים על המיקס הגלובלי של המכשיר
-            loudnessEnhancer = LoudnessEnhancer(0)
-            equalizer = Equalizer(0, 0)
-            bassBoost = BassBoost(0, 0)
-            virtualizer = Virtualizer(0, 0)
-        } catch (e: Exception) {
-            Toast.makeText(this, "שגיאה בגישה למנוע הסאונד של המכשיר", Toast.LENGTH_LONG).show()
-        }
-    }
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switchEnable"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:scaleX="1.3"
+                    android:scaleY="1.3"
+                    app:thumbTint="#00E676"
+                    app:trackTint="#2E3B4E" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
-    private fun setupUI() {
-        val switchEnable = findViewById<Switch>(R.id.switchEnable)
-        val seekBoost = findViewById<SeekBar>(R.id.seekBoost)
-        val tvBoostLabel = findViewById<TextView>(R.id.tvBoostLabel)
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="20dp"
+            app:cardBackgroundColor="#161B26"
+            app:cardCornerRadius="24dp"
+            app:cardElevation="8dp"
+            app:strokeColor="#00E676"
+            app:strokeWidth="1dp">
 
-        val seekBass = findViewById<SeekBar>(R.id.seekBass)
-        val tvBassLabel = findViewById<TextView>(R.id.tvBassLabel)
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
 
-        val seekVirtualizer = findViewById<SeekBar>(R.id.seekVirtualizer)
-        val tvVirtualizerLabel = findViewById<TextView>(R.id.tvVirtualizerLabel)
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
-        val eqContainer = findViewById<LinearLayout>(R.id.eqContainer)
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="הגברת עוצמה (Max Gain)"
+                        android:textColor="#A0AAB8"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
 
-        // הפעלה וכיבוי של כל המנועים
-        switchEnable.setOnCheckedChangeListener { _, isChecked ->
-            loudnessEnhancer?.enabled = isChecked
-            equalizer?.enabled = isChecked
-            bassBoost?.enabled = isChecked
-            virtualizer?.enabled = isChecked
-        }
+                    <TextView
+                        android:id="@+id/tvBoostValue"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="+0.0 dB (0%)"
+                        android:textColor="#00E676"
+                        android:textSize="22sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
 
-        // 1. Loudness Enhancer (עד 3000mB שהם 30dB תוספת)
-        seekBoost.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                tvBoostLabel.text = "הגברת ווליום אקסטרה (Boost): $progress%"
-                val gainMillibels = progress * 30 // מקסימום 3000mB
-                loudnessEnhancer?.setTargetGain(gainMillibels)
-            }
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-        })
+                <ProgressBar
+                    android:id="@+id/progressBoost"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="8dp"
+                    android:layout_marginTop="12dp"
+                    android:max="100"
+                    android:progress="0"
+                    android:progressTint="#00E676"
+                    android:progressBackgroundTint="#263042" />
 
-        // 2. Bass Boost (0 עד 1000)
-        seekBass.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                val percent = progress / 10
-                tvBassLabel.text = "הגברת באס (Bass Boost): $percent%"
-                bassBoost?.setStrength(progress.toShort())
-            }
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-        })
+                <SeekBar
+                    android:id="@+id/seekBoost"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:max="100"
+                    android:progressTint="#00E676"
+                    android:thumbTint="#00E676" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
-        // 3. Virtualizer (0 עד 1000)
-        seekVirtualizer.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                val percent = progress / 10
-                tvVirtualizerLabel.text = "אפקט מרחבי (3D Virtualizer): $percent%"
-                virtualizer?.setStrength(progress.toShort())
-            }
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-        })
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="20dp"
+            app:cardBackgroundColor="#161B26"
+            app:cardCornerRadius="24dp"
+            app:cardElevation="6dp"
+            app:strokeColor="#263042"
+            app:strokeWidth="1dp">
 
-        // 4. בניית סליידרים לאקולייזר לפי תדרי המכשיר
-        equalizer?.let { eq ->
-            val bands = eq.numberOfBands
-            val minEQ = eq.bandLevelRange[0]
-            val maxEQ = eq.bandLevelRange[1]
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
 
-            for (i in 0 until bands) {
-                val band = i.toShort()
-                val freqHz = eq.getCenterFreq(band) / 1000
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    android:text="אפקטים אקוסטיים"
+                    android:textColor="#FFFFFF"
+                    android:textSize="17sp"
+                    android:textStyle="bold" />
 
-                val label = TextView(this).apply {
-                    text = "תדר ${freqHz}Hz"
-                    setTextColor(Color.WHITE)
-                }
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
 
-                val seekBar = SeekBar(this).apply {
-                    max = maxEQ - minEQ
-                    progress = eq.getBandLevel(band) - minEQ
-                    setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                        override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                            val newLevel = (p + minEQ).toShort()
-                            eq.setBandLevel(band, newLevel)
-                        }
-                        override fun onStartTrackingTouch(s: SeekBar?) {}
-                        override fun onStopTrackingTouch(s: SeekBar?) {}
-                    })
-                }
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Sub-Bass Boost (הדגשת באס)"
+                        android:textColor="#D0D8E8"
+                        android:textSize="14sp" />
 
-                eqSliders.add(seekBar)
-                eqContainer.addView(label)
-                eqContainer.addView(seekBar)
-            }
-        }
+                    <TextView
+                        android:id="@+id/tvBassValue"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0%"
+                        android:textColor="#BB86FC"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
 
-        // 5. כפתורי פרופילים (Presets)
-        findViewById<Button>(R.id.btnPresetNormal).setOnClickListener {
-            applyPreset(listOf(0, 0, 0, 0, 0))
-        }
-        findViewById<Button>(R.id.btnPresetBass).setOnClickListener {
-            applyPreset(listOf(80, 50, 0, -10, 20))
-        }
-        findViewById<Button>(R.id.btnPresetVocal).setOnClickListener {
-            applyPreset(listOf(-30, 10, 70, 60, 20))
-        }
-    }
+                <SeekBar
+                    android:id="@+id/seekBass"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:layout_marginBottom="18dp"
+                    android:max="1000"
+                    android:progressTint="#BB86FC"
+                    android:thumbTint="#BB86FC" />
 
-    private fun applyPreset(offsetsPercent: List<Int>) {
-        val eq = equalizer ?: return
-        val minEQ = eq.bandLevelRange[0]
-        val maxEQ = eq.bandLevelRange[1]
-        val range = maxEQ - minEQ
-        val mid = range / 2
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
 
-        for (i in 0 until minOf(eqSliders.size, offsetsPercent.size)) {
-            val offset = (range * offsetsPercent[i]) / 200
-            eqSliders[i].progress = (mid + offset).coerceIn(0, range)
-        }
-    }
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="3D Spatial Audio (סראונד מרחבי)"
+                        android:textColor="#D0D8E8"
+                        android:textSize="14sp" />
 
-    override fun onDestroy() {
-        super.onDestroy()
-        // שחרור משאבים בסגירה מלאה
-        loudnessEnhancer?.release()
-        equalizer?.release()
-        bassBoost?.release()
-        virtualizer?.release()
-    }
-}
+                    <TextView
+                        android:id="@+id/tvVirtualizerValue"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0%"
+                        android:textColor="#00E5FF"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <SeekBar
+                    android:id="@+id/seekVirtualizer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:max="1000"
+                    android:progressTint="#00E5FF"
+                    android:thumbTint="#00E5FF" />
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
+            android:text="פרופילי שמע חכמים"
+            android:textColor="#FFFFFF"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="20dp"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnPresetNormal"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_marginEnd="6dp"
+                android:layout_weight="1"
+                android:text="מאוזן"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                app:cornerRadius="14dp"
+                app:strokeColor="#3A465E" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnPresetBass"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_marginEnd="6dp"
+                android:layout_weight="1"
+                android:text="באס כבד"
+                android:textColor="#BB86FC"
+                android:textSize="12sp"
+                app:cornerRadius="14dp"
+                app:strokeColor="#BB86FC" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnPresetVocal"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_marginEnd="6dp"
+                android:layout_weight="1"
+                android:text="ווקאל נקי"
+                android:textColor="#00E5FF"
+                android:textSize="12sp"
+                app:cornerRadius="14dp"
+                app:strokeColor="#00E5FF" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnPresetGaming"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_weight="1"
+                android:text="גיימינג"
+                android:textColor="#00E676"
+                android:textSize="12sp"
+                app:cornerRadius="14dp"
+                app:strokeColor="#00E676" />
+        </LinearLayout>
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp"
+            app:cardBackgroundColor="#161B26"
+            app:cardCornerRadius="24dp"
+            app:cardElevation="6dp"
+            app:strokeColor="#263042"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="14dp"
+                    android:text="אקולייזר תדרים מדויק (Master EQ)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="17sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:id="@+id/eqContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+    </LinearLayout>
+</ScrollView>
+    
