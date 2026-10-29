@@ -1,23 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
-    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-
-    <application
-        android:allowBackup="true"
-        android:icon="@android:drawable/ic_lock_silent_mode_off"
-        android:label="Sound Booster Pro"
-        android:supportsRtl="true"
-        android:theme="@style/Theme.MaterialComponents.DayNight.DarkActionBar">
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <path
+        android:fillColor="#0B0E14"
+        android:pathData="M0,0h108v108h-108z" />
         
-        <activity
-            android:name=".MainActivity"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-    </application>
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M54,12A42,42 0,1 1,12 54,42 42,0 0,1 54,12M54,8A46,46 0,1 0,100 54,46 46,0 0,0 54,8Z" />
 
-</manifest>
+    <path
+        android:fillColor="#00E676"
+        android:pathData="M30,42v24h16l20,20V22L46,42H30zM78,54c0,-7.08 -4.08,-13.16 -10,-16.12v32.2C73.92,67.16 78,61.08 78,54zM68,18.92v8.24c11.56,3.44 20,14.16 20,26.84s-8.44,23.4 -20,26.84v8.24c16.04,-3.64 28,-17.92 28,-35.08S84.04,22.56 68,18.92z" />
+</vector>
