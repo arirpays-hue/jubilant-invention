@@ -1,6 +1,7 @@
 package com.example.soundbooster
 
 import android.content.Context
+import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.media.AudioManager
@@ -9,8 +10,8 @@ import android.media.audiofx.Equalizer
 import android.media.audiofx.LoudnessEnhancer
 import android.media.audiofx.Virtualizer
 import android.os.Bundle
+import android.provider.Settings
 import android.view.Gravity
-import android.view.KeyEvent
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.SeekBar
@@ -34,6 +35,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var seekTotalVolume: SeekBar
     private lateinit var switchEnable: SwitchCompat
+    private lateinit var btnEnableSystemSlider: MaterialButton
     private val eqSliders = mutableListOf<SeekBar>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -42,36 +44,45 @@ class MainActivity : AppCompatActivity() {
         window.navigationBarColor = Color.parseColor("#0B0E14")
         setContentView(R.layout.activity_main)
 
-        // חיבור למנהל השמע של המכשיר (עוצמת מוזיקה/מדיה)
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         maxSystemVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
 
         initAudioEffects()
         setupModernUI()
-        syncWithSystemVolume()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        updateServiceButtonState()
+        seekTotalVolume.progress = VolumeOverlayService.currentTotalVolume
+    }
+
+    private fun updateServiceButtonState() {
+        if (VolumeOverlayService.instance != null) {
+            btnEnableSystemSlider.text = "✅ מחוון הווליום המערכתי (200%) פעיל!"
+            btnEnableSystemSlider.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#00E676"))
+        } else {
+            btnEnableSystemSlider.text = "הפעל מחוון ווליום מערכתי בהגדרות"
+            btnEnableSystemSlider.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#00E5FF"))
+        }
     }
 
     private fun initAudioEffects() {
         try {
-            loudnessEnhancer = LoudnessEnhancer(0)
-            equalizer = Equalizer(0, 0)
-            bassBoost = BassBoost(0, 0)
-            virtualizer = Virtualizer(0, 0)
+            loudnessEnhancer = LoudnessEnhancer(0).apply { enabled = true }
+            equalizer = Equalizer(0, 0).apply { enabled = true }
+            bassBoost = BassBoost(0, 0).apply { enabled = true }
+            virtualizer = Virtualizer(0, 0).apply { enabled = true }
         } catch (e: Exception) {
             Toast.makeText(this, "שגיאה בחיבור למנוע האודיו של המכשיר", Toast.LENGTH_LONG).show()
         }
-    }
-
-    private fun syncWithSystemVolume() {
-        val currentSysVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-        val sysPercent = ((currentSysVol.toFloat() / maxSystemVolume) * 100).roundToInt()
-        seekTotalVolume.progress = sysPercent
     }
 
     private fun setupModernUI() {
         switchEnable = findViewById(R.id.switchEnable)
         val tvStatus = findViewById<TextView>(R.id.tvStatus)
         val cardHeader = findViewById<MaterialCardView>(R.id.cardHeader)
+        btnEnableSystemSlider = findViewById(R.id.btnEnableSystemSlider)
 
         seekTotalVolume = findViewById(R.id.seekTotalVolume)
         val tvTotalVolume = findViewById<TextView>(R.id.tvTotalVolume)
@@ -86,7 +97,13 @@ class MainActivity : AppCompatActivity() {
 
         val eqContainer = findViewById<LinearLayout>(R.id.eqContainer)
 
+        btnEnableSystemSlider.setOnClickListener {
+            Toast.makeText(this, "חפש ברשימה 'Sound Booster מחוון ווליום 200%' והפעל אותו", Toast.LENGTH_LONG).show()
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        }
+
         switchEnable.setOnCheckedChangeListener { _, isChecked ->
+            VolumeOverlayService.isBoosterActive = isChecked
             loudnessEnhancer?.enabled = isChecked
             equalizer?.enabled = isChecked
             bassBoost?.enabled = isChecked
@@ -106,37 +123,37 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // סליידר ווליום מאוחד (0% עד 200%)
         seekTotalVolume.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 tvTotalVolume.text = "$progress%"
                 progressTotalVolume.progress = progress
+                VolumeOverlayService.currentTotalVolume = progress
+
+                if (VolumeOverlayService.instance != null) {
+                    VolumeOverlayService.instance?.applyVolume(progress)
+                } else {
+                    if (progress <= 100) {
+                        val targetSysVol = ((progress / 100f) * maxSystemVolume).roundToInt()
+                        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetSysVol, 0)
+                        loudnessEnhancer?.setTargetGain(0)
+                    } else {
+                        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, maxSystemVolume, 0)
+                        loudnessEnhancer?.setTargetGain((progress - 100) * 30)
+                    }
+                }
 
                 if (progress <= 100) {
-                    // תחום ווליום רגיל של המכשיר (0% עד 100%)
-                    val targetSysVol = ((progress / 100f) * maxSystemVolume).roundToInt()
-                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetSysVol, 0)
-                    loudnessEnhancer?.setTargetGain(0)
                     tvSubBoostInfo.text = "ווליום מערכת: $progress% | הגברת אקסטרה: כבויה"
                 } else {
-                    // תחום מוגבר מעבר למקסימום של הטלפון (101% עד 200%)
-                    if (!switchEnable.isChecked) {
-                        switchEnable.isChecked = true
-                    }
-                    // נועל את ווליום המכשיר על 100% ומוסיף הגברת תוכנה
-                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, maxSystemVolume, 0)
                     val extraPercent = progress - 100
-                    val gainMillibels = extraPercent * 30 // עד 3000mB (+30dB)
-                    loudnessEnhancer?.setTargetGain(gainMillibels)
-
                     val db = String.format("%.1f", extraPercent * 0.3f)
                     tvSubBoostInfo.text = "מערכת: 100% | תוספת אקסטרה: +$db dB (+$extraPercent%)"
                 }
 
                 val color = when {
-                    progress > 160 -> Color.parseColor("#FF5252") // אדום עוצמה קיצונית
-                    progress > 100 -> Color.parseColor("#FFD740") // צהוב/כתום מצב מוגבר
-                    else -> Color.parseColor("#00E676")           // ירוק רגיל
+                    progress > 160 -> Color.parseColor("#FF5252")
+                    progress > 100 -> Color.parseColor("#FFD740")
+                    else -> Color.parseColor("#00E676")
                 }
                 tvTotalVolume.setTextColor(color)
                 progressTotalVolume.progressTintList = ColorStateList.valueOf(color)
@@ -147,20 +164,10 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
 
-        // כפתורי קפיצה מהירה לווליום
-        findViewById<MaterialButton>(R.id.btnVol100).setOnClickListener {
-            seekTotalVolume.progress = 100
-        }
-        findViewById<MaterialButton>(R.id.btnVol150).setOnClickListener {
-            switchEnable.isChecked = true
-            seekTotalVolume.progress = 150
-        }
-        findViewById<MaterialButton>(R.id.btnVol200).setOnClickListener {
-            switchEnable.isChecked = true
-            seekTotalVolume.progress = 200
-        }
+        findViewById<MaterialButton>(R.id.btnVol100).setOnClickListener { seekTotalVolume.progress = 100 }
+        findViewById<MaterialButton>(R.id.btnVol150).setOnClickListener { seekTotalVolume.progress = 150 }
+        findViewById<MaterialButton>(R.id.btnVol200).setOnClickListener { seekTotalVolume.progress = 200 }
 
-        // באס
         seekBass.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 tvBassValue.text = "${progress / 10}%"
@@ -170,7 +177,6 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
 
-        // סראונד
         seekVirtualizer.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 tvVirtualizerValue.text = "${progress / 10}%"
@@ -180,7 +186,6 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
 
-        // אקולייזר
         equalizer?.let { eq ->
             val bands = eq.numberOfBands
             val minEQ = eq.bandLevelRange[0]
@@ -251,23 +256,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // תפיסת כפתורי הווליום הפיזיים של המכשיר כדי לאפשר עלייה מעל 100% עד 200%
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        when (keyCode) {
-            KeyEvent.KEYCODE_VOLUME_UP -> {
-                val nextVol = (seekTotalVolume.progress + 10).coerceAtMost(200)
-                seekTotalVolume.progress = nextVol
-                return true
-            }
-            KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                val prevVol = (seekTotalVolume.progress - 10).coerceAtLeast(0)
-                seekTotalVolume.progress = prevVol
-                return true
-            }
-        }
-        return super.onKeyDown(keyCode, event)
-    }
-
     private fun applyPreset(offsetsPercent: List<Int>, bass: Int, surround: Int) {
         val eq = equalizer ?: return
         val minEQ = eq.bandLevelRange[0]
@@ -283,13 +271,4 @@ class MainActivity : AppCompatActivity() {
         findViewById<SeekBar>(R.id.seekBass).progress = bass
         findViewById<SeekBar>(R.id.seekVirtualizer).progress = surround
     }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        loudnessEnhancer?.release()
-        equalizer?.release()
-        bassBoost?.release()
-        virtualizer?.release()
-    }
 }
- 
