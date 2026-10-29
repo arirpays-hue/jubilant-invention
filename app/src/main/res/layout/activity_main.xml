@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#121212"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- מתג הפעלה ראשי -->
+        <Switch
+            android:id="@+id/switchEnable"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="הפעל מנוע סאונד והגברה"
+            android:textColor="#00E676"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="20dp"/>
+
+        <!-- הגברת עוצמת קול מעל 100% -->
+        <TextView
+            android:id="@+id/tvBoostLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="הגברת ווליום אקסטרה (Boost): 0%"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp" />
+
+        <SeekBar
+            android:id="@+id/seekBoost"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100"
+            android:layout_marginBottom="20dp" />
+
+        <!-- הדגשת באס -->
+        <TextView
+            android:id="@+id/tvBassLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="הגברת באס (Bass Boost): 0%"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp" />
+
+        <SeekBar
+            android:id="@+id/seekBass"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="1000"
+            android:layout_marginBottom="20dp" />
+
+        <!-- אפקט סראונד 3D -->
+        <TextView
+            android:id="@+id/tvVirtualizerLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="אפקט מרחבי (3D Virtualizer): 0%"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp" />
+
+        <SeekBar
+            android:id="@+id/seekVirtualizer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="1000"
+            android:layout_marginBottom="24dp" />
+
+        <!-- פרופילים מוכנים -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="פרופילים מוכנים (Presets):"
+            android:textColor="#BB86FC"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="24dp">
+
+            <Button
+                android:id="@+id/btnPresetNormal"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="רגיל"
+                android:layout_marginEnd="4dp"/>
+
+            <Button
+                android:id="@+id/btnPresetBass"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="באס כבד"
+                android:layout_marginEnd="4dp"/>
+
+            <Button
+                android:id="@+id/btnPresetVocal"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="דיבור/קול" />
+        </LinearLayout>
+
+        <!-- אזור אקולייזר דינמי -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="אקולייזר תדרים (Equalizer):"
+            android:textColor="#03DAC5"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="12dp" />
+
+        <LinearLayout
+            android:id="@+id/eqContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+    </LinearLayout>
+</ScrollView>
