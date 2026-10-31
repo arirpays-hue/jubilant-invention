@@ -5,14 +5,14 @@
     android:layout_height="match_parent"
     android:background="#0B0E14"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:padding="14dp">
 
     <!-- כותרת עליונה קבועה -->
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/cardHeader"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="12dp"
+        android:layout_marginBottom="10dp"
         app:cardBackgroundColor="#161B26"
         app:cardCornerRadius="22dp"
         app:cardElevation="6dp"
@@ -24,7 +24,7 @@
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:padding="16dp">
+            android:padding="14dp">
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -37,7 +37,7 @@
                     android:layout_height="wrap_content"
                     android:text="SOUND BOOSTER PRO HD"
                     android:textColor="#FFFFFF"
-                    android:textSize="18sp"
+                    android:textSize="17sp"
                     android:textStyle="bold" />
 
                 <TextView
@@ -47,7 +47,7 @@
                     android:layout_marginTop="2dp"
                     android:text="מנוע DSP HD פעיל ● ללא איבוד איכות"
                     android:textColor="#00E676"
-                    android:textSize="12sp"
+                    android:textSize="11sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
@@ -63,67 +63,85 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-    <!-- סרגל ניווט קטגוריות (4 קטגוריות) -->
-    <LinearLayout
+    <!-- סרגל ניווט 5 קטגוריות (נגלל אופקית לנוחות מרבית) -->
+    <HorizontalScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="14dp"
+        android:layout_marginBottom="12dp"
         android:background="#121722"
-        android:orientation="horizontal"
-        android:padding="4dp">
+        android:padding="4dp"
+        android:scrollbars="none">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/tabBtnVolume"
-            style="@style/Widget.MaterialComponents.Button.TextButton"
-            android:layout_width="0dp"
-            android:layout_height="44dp"
-            android:layout_weight="1"
-            android:backgroundTint="#00E676"
-            android:text="עוצמה"
-            android:textColor="#0B0E14"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            app:cornerRadius="12dp" />
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/tabBtnQuality"
-            style="@style/Widget.MaterialComponents.Button.TextButton"
-            android:layout_width="0dp"
-            android:layout_height="44dp"
-            android:layout_weight="1"
-            android:backgroundTint="#00000000"
-            android:text="איכות HD"
-            android:textColor="#A0AAB8"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            app:cornerRadius="12dp" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/tabBtnVolume"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="42dp"
+                android:layout_marginEnd="4dp"
+                android:backgroundTint="#00E676"
+                android:text="🔊 עוצמה"
+                android:textColor="#0B0E14"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                app:cornerRadius="12dp" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/tabBtnEffects"
-            style="@style/Widget.MaterialComponents.Button.TextButton"
-            android:layout_width="0dp"
-            android:layout_height="44dp"
-            android:layout_weight="1"
-            android:backgroundTint="#00000000"
-            android:text="אפקטים"
-            android:textColor="#A0AAB8"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            app:cornerRadius="12dp" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/tabBtnQuality"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="42dp"
+                android:layout_marginEnd="4dp"
+                android:backgroundTint="#00000000"
+                android:text="✨ איכות HD"
+                android:textColor="#A0AAB8"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                app:cornerRadius="12dp" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/tabBtnEq"
-            style="@style/Widget.MaterialComponents.Button.TextButton"
-            android:layout_width="0dp"
-            android:layout_height="44dp"
-            android:layout_weight="1"
-            android:backgroundTint="#00000000"
-            android:text="אקולייזר"
-            android:textColor="#A0AAB8"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            app:cornerRadius="12dp" />
-    </LinearLayout>
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/tabBtnEffects"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="42dp"
+                android:layout_marginEnd="4dp"
+                android:backgroundTint="#00000000"
+                android:text="🎛️ אפקטים"
+                android:textColor="#A0AAB8"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                app:cornerRadius="12dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/tabBtnEq"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="42dp"
+                android:layout_marginEnd="4dp"
+                android:backgroundTint="#00000000"
+                android:text="🎚️ אקולייזר"
+                android:textColor="#A0AAB8"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                app:cornerRadius="12dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/tabBtnSliderDesign"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="42dp"
+                android:backgroundTint="#00000000"
+                android:text="🎨 עיצוב מחוון הקול"
+                android:textColor="#A0AAB8"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                app:cornerRadius="12dp" />
+        </LinearLayout>
+    </HorizontalScrollView>
 
     <ScrollView
         android:layout_width="match_parent"
@@ -279,7 +297,6 @@
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
-                <!-- כרטיסיית חיבור למחוון המקורי של המכשיר -->
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -297,7 +314,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="סנכרון עם מחוון הווליום המקורי של המכשיר"
+                            android:text="סנכרון עם מחוון הווליום של המכשיר"
                             android:textColor="#00E5FF"
                             android:textSize="15sp"
                             android:textStyle="bold" />
@@ -306,7 +323,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="4dp"
-                            android:text="משאיר את המחוון המקורי של מערכת ההפעלה שלך בדיוק כפי שהוא (בכל סוגי המכשירים), ומרחיב אותו להגברה עד 200% מכל מסך."
+                            android:text="מאפשר להגביר עד 200% מכפתורי הווליום הפיזיים בכל מסך, עם מחוון המערכת המקורי או כל אחד מ-10 העיצובים המותאמים."
                             android:textColor="#D0D8E8"
                             android:textSize="12sp" />
 
@@ -364,7 +381,6 @@
                             android:textColor="#A0AAB8"
                             android:textSize="12sp" />
 
-                        <!-- מתג 1: Anti-Clipping Limiter -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -402,7 +418,6 @@
                                 app:thumbTint="#00E676" />
                         </LinearLayout>
 
-                        <!-- מתג 2: Hi-Res Acoustic Optimizer -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -440,7 +455,6 @@
                                 app:thumbTint="#00E5FF" />
                         </LinearLayout>
 
-                        <!-- סליידר חדות וצלילות (Clarity Exciter) -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -476,7 +490,6 @@
                             android:progressTint="#00E5FF"
                             android:thumbTint="#00E5FF" />
 
-                        <!-- סליידר חמימות באס טבעית (Warmth) -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -547,7 +560,6 @@
                             android:textSize="16sp"
                             android:textStyle="bold" />
 
-                        <!-- באס -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -581,7 +593,6 @@
                             android:progressTint="#BB86FC"
                             android:thumbTint="#BB86FC" />
 
-                        <!-- סראונד 3D -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -615,7 +626,6 @@
                             android:progressTint="#00E5FF"
                             android:thumbTint="#00E5FF" />
 
-                        <!-- Reverb -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -758,6 +768,499 @@
                             android:orientation="vertical" />
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
+            </LinearLayout>
+
+            <!-- ================= קטגוריה 5: עיצוב מחוון עוצמת הקול ================= -->
+            <LinearLayout
+                android:id="@+id/sectionSliderDesign"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <!-- 1. בחירת סגנון מחוון (מערכת + 10 עיצובים מיוחדים) -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    app:cardBackgroundColor="#161B26"
+                    app:cardCornerRadius="24dp"
+                    app:strokeColor="#00E5FF"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="18dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="סגנון מחוון עוצמת הקול (11 עיצובים)"
+                                    android:textColor="#FFFFFF"
+                                    android:textSize="16sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:id="@+id/tvSelectedStyleName"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="פעיל כעת: עיצוב הזכוכית (Glassmorphism)"
+                                    android:textColor="#00E5FF"
+                                    android:textSize="12sp"
+                                    android:textStyle="bold" />
+                            </LinearLayout>
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnTestSliderOverlay"
+                                android:layout_width="wrap_content"
+                                android:layout_height="40dp"
+                                android:backgroundTint="#00E676"
+                                android:text="הצג מחוון כעת"
+                                android:textColor="#0B0E14"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                app:cornerRadius="12dp" />
+                        </LinearLayout>
+
+                        <!-- מיכל דינמי לכל כפתורי 11 העיצובים -->
+                        <LinearLayout
+                            android:id="@+id/stylesGridContainer"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:orientation="vertical" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- 2. גלגל צבעים מלא (360° Color Wheel) ו-4 אזורי צביעה -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    app:cardBackgroundColor="#161B26"
+                    app:cardCornerRadius="24dp"
+                    app:strokeColor="#BB86FC"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="18dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="גלגל צבעים מלא לכל חלקי המחוון"
+                            android:textColor="#FFFFFF"
+                            android:textSize="16sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:layout_marginBottom="10dp"
+                            android:text="בחר איזה רכיב במחוון תרצה לצבוע, וסובב את גלגל הצבעים או את המחוונים:"
+                            android:textColor="#A0AAB8"
+                            android:textSize="12sp" />
+
+                        <!-- בורר חלק במחוון לצביעה -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="12dp"
+                            android:orientation="horizontal">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnTargetAccent"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="0dp"
+                                android:layout_height="42dp"
+                                android:layout_marginEnd="4dp"
+                                android:layout_weight="1"
+                                android:text="מילוי"
+                                android:textColor="#00E5FF"
+                                android:textSize="10sp"
+                                app:cornerRadius="10dp"
+                                app:strokeColor="#00E5FF" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnTargetBg"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="0dp"
+                                android:layout_height="42dp"
+                                android:layout_marginEnd="4dp"
+                                android:layout_weight="1"
+                                android:text="רקע"
+                                android:textColor="#A0AAB8"
+                                android:textSize="10sp"
+                                app:cornerRadius="10dp"
+                                app:strokeColor="#3A465E" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnTargetBorder"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="0dp"
+                                android:layout_height="42dp"
+                                android:layout_marginEnd="4dp"
+                                android:layout_weight="1"
+                                android:text="מסגרת"
+                                android:textColor="#A0AAB8"
+                                android:textSize="10sp"
+                                app:cornerRadius="10dp"
+                                app:strokeColor="#3A465E" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnTargetText"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="0dp"
+                                android:layout_height="42dp"
+                                android:layout_weight="1"
+                                android:text="טקסט"
+                                android:textColor="#A0AAB8"
+                                android:textSize="10sp"
+                                app:cornerRadius="10dp"
+                                app:strokeColor="#3A465E" />
+                        </LinearLayout>
+
+                        <!-- אזור גלגל הצבעים האינטראקטיבי -->
+                        <FrameLayout
+                            android:id="@+id/colorWheelHolder"
+                            android:layout_width="match_parent"
+                            android:layout_height="210dp"
+                            android:layout_gravity="center" />
+
+                        <TextView
+                            android:id="@+id/tvCurrentHexColor"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:gravity="center"
+                            android:text="צבע נבחר: #00E5FF"
+                            android:textColor="#FFFFFF"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
+
+                        <!-- מחוון גוון (Hue) -->
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:text="מחזור גוון (Hue 0°-360°)"
+                            android:textColor="#D0D8E8"
+                            android:textSize="12sp" />
+
+                        <SeekBar
+                            android:id="@+id/seekColorHue"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:max="360"
+                            android:progress="190"
+                            android:progressTint="#00E5FF"
+                            android:thumbTint="#00E5FF" />
+
+                        <!-- מחוון רוויה (Saturation) -->
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="עוצמת רוויה (Saturation)"
+                            android:textColor="#D0D8E8"
+                            android:textSize="12sp" />
+
+                        <SeekBar
+                            android:id="@+id/seekColorSat"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:max="100"
+                            android:progress="85"
+                            android:progressTint="#BB86FC"
+                            android:thumbTint="#BB86FC" />
+
+                        <!-- מחוון בהירות (Brightness / Value) -->
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="בהירות צבע (Brightness)"
+                            android:textColor="#D0D8E8"
+                            android:textSize="12sp" />
+
+                        <SeekBar
+                            android:id="@+id/seekColorVal"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:max="100"
+                            android:progress="95"
+                            android:progressTint="#00E676"
+                            android:thumbTint="#00E676" />
+
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- 3. שקיפות מחוון, טשטוש מסך רקע, מיקום ומידות -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="24dp"
+                    app:cardBackgroundColor="#161B26"
+                    app:cardCornerRadius="24dp"
+                    app:strokeColor="#00E676"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="18dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="12dp"
+                            android:text="שקיפות, טשטוש שאר המסך והתאמה אישית"
+                            android:textColor="#FFFFFF"
+                            android:textSize="16sp"
+                            android:textStyle="bold" />
+
+                        <!-- שקיפות המחוון -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="אטימות / שקיפות המחוון (Opacity)"
+                                android:textColor="#D0D8E8"
+                                android:textSize="13sp" />
+
+                            <TextView
+                                android:id="@+id/tvSliderAlphaValue"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="85%"
+                                android:textColor="#00E676"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <SeekBar
+                            android:id="@+id/seekSliderAlpha"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="14dp"
+                            android:max="100"
+                            android:progress="85"
+                            android:progressTint="#00E676"
+                            android:thumbTint="#00E676" />
+
+                        <!-- מתג טשטוש שאר המסך (Background Blur) -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="6dp">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="טשטוש ועמעום שאר המסך (Screen Blur)"
+                                    android:textColor="#FFFFFF"
+                                    android:textSize="14sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="מטשטש את הרקע שמאחורי המחוון למראה זכוכית יוקרתי"
+                                    android:textColor="#A0AAB8"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+
+                            <androidx.appcompat.widget.SwitchCompat
+                                android:id="@+id/switchBlurScreen"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:checked="true"
+                                app:thumbTint="#00E5FF" />
+                        </LinearLayout>
+
+                        <!-- עוצמת טשטוש שאר המסך -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="עוצמת טשטוש ועמעום הרקע"
+                                android:textColor="#D0D8E8"
+                                android:textSize="13sp" />
+
+                            <TextView
+                                android:id="@+id/tvBlurStrengthValue"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="45%"
+                                android:textColor="#00E5FF"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <SeekBar
+                            android:id="@+id/seekBlurStrength"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="14dp"
+                            android:max="100"
+                            android:progress="45"
+                            android:progressTint="#00E5FF"
+                            android:thumbTint="#00E5FF" />
+
+                        <!-- עובי וגודל המחוון -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="גודל ועובי המחוון (Scale)"
+                                android:textColor="#D0D8E8"
+                                android:textSize="13sp" />
+
+                            <TextView
+                                android:id="@+id/tvSliderScaleValue"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="100%"
+                                android:textColor="#BB86FC"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <SeekBar
+                            android:id="@+id/seekSliderScale"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="14dp"
+                            android:max="150"
+                            android:progress="100"
+                            android:progressTint="#BB86FC"
+                            android:thumbTint="#BB86FC" />
+
+                        <!-- עיגול פינות (Corner Radius) -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="רדיוס עיגול פינות (Corner Radius)"
+                                android:textColor="#D0D8E8"
+                                android:textSize="13sp" />
+
+                            <TextView
+                                android:id="@+id/tvCornerRadiusValue"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="32 dp"
+                                android:textColor="#FFD740"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <SeekBar
+                            android:id="@+id/seekCornerRadius"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="14dp"
+                            android:max="50"
+                            android:progress="32"
+                            android:progressTint="#FFD740"
+                            android:thumbTint="#FFD740" />
+
+                        <!-- בחירת צד מסך (ימין או שמאל) -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="מיקום המחוון במסך:"
+                                android:textColor="#FFFFFF"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnSideRight"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="40dp"
+                                android:layout_marginEnd="6dp"
+                                android:text="צד ימין"
+                                android:textColor="#00E676"
+                                android:textSize="11sp"
+                                app:cornerRadius="10dp"
+                                app:strokeColor="#00E676" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnSideLeft"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="40dp"
+                                android:text="צד שמאל"
+                                android:textColor="#A0AAB8"
+                                android:textSize="11sp"
+                                app:cornerRadius="10dp"
+                                app:strokeColor="#3A465E" />
+                        </LinearLayout>
+
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
             </LinearLayout>
 
         </FrameLayout>
