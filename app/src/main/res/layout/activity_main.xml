@@ -778,7 +778,7 @@
                 android:orientation="vertical"
                 android:visibility="gone">
 
-                <!-- 1. בחירת סגנון מחוון (מערכת + 10 עיצובים עם זיכרון נפרד לכל אחד) -->
+                <!-- 1. בחירת סגנון מחוון -->
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -891,7 +891,6 @@
                             android:textColor="#A0AAB8"
                             android:textSize="11sp" />
 
-                        <!-- בורר חלק במחוון לצביעה -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -967,7 +966,6 @@
                             android:textSize="13sp"
                             android:textStyle="bold" />
 
-                        <!-- מחוון בהירות הגלגל (משנה את הצבעים בגלגל עצמו בלי להזיז את הבורר!) -->
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
@@ -986,7 +984,6 @@
                             android:progressTint="#00E676"
                             android:thumbTint="#00E676" />
 
-                        <!-- מחוון רוויה / מעבר לצבע בהיר-לבן -->
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
@@ -1004,7 +1001,6 @@
                             android:progressTint="#BB86FC"
                             android:thumbTint="#BB86FC" />
 
-                        <!-- מחוון גוון -->
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
@@ -1050,7 +1046,6 @@
                             android:textSize="16sp"
                             android:textStyle="bold" />
 
-                        <!-- שקיפות המחוון -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -1085,7 +1080,6 @@
                             android:progressTint="#00E676"
                             android:thumbTint="#00E676" />
 
-                        <!-- א. טשטוש מסך אמיתי (True Blur ללא השחרה!) -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -1158,7 +1152,6 @@
                             android:progressTint="#00E5FF"
                             android:thumbTint="#00E5FF" />
 
-                        <!-- ב. השחרת מסך ברקע (Screen Dimming נפרד לחלוטין!) -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -1277,7 +1270,6 @@
                             android:textStyle="bold"
                             app:cornerRadius="12dp" />
 
-                        <!-- רוחב המחוון -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -1312,7 +1304,6 @@
                             android:progressTint="#00E676"
                             android:thumbTint="#00E676" />
 
-                        <!-- אורך / גובה המחוון -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -1347,7 +1338,6 @@
                             android:progressTint="#00E5FF"
                             android:thumbTint="#00E5FF" />
 
-                        <!-- מיקום אופקי X -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -1357,7 +1347,7 @@
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
-                                android:text="מיקום אופקי במסך (שמאל <-> ימין)"
+                                android:text="מיקום אופקי במסך (שמאל ↔ ימין)"
                                 android:textColor="#D0D8E8"
                                 android:textSize="13sp" />
 
@@ -1382,7 +1372,6 @@
                             android:progressTint="#BB86FC"
                             android:thumbTint="#BB86FC" />
 
-                        <!-- מיקום אנכי Y -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -1392,7 +1381,7 @@
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
-                                android:text="מיקום אנכי במסך (למעלה <-> למטה)"
+                                android:text="מיקום אנכי במסך (למעלה ↔ למטה)"
                                 android:textColor="#D0D8E8"
                                 android:textSize="13sp" />
 
@@ -1417,7 +1406,6 @@
                             android:progressTint="#BB86FC"
                             android:thumbTint="#BB86FC" />
 
-                        <!-- עיגול פינות -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
