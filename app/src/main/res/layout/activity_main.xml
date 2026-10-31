@@ -50,7 +50,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="מנוע סאונד מוכן ●"
+                        android:text="מנוע סאונד פעיל ●"
                         android:textColor="#00E676"
                         android:textSize="13sp"
                         android:textStyle="bold" />
@@ -68,7 +68,7 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- כרטיסיית הפעלת מחוון מערכת (השתלטות על כפתורי הווליום מכל מקום) -->
+        <!-- כרטיסיית הפעלת מחוון מערכת -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -87,7 +87,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="שדרוג מחוון הווליום של הטלפון (עד 200%)"
+                    android:text="מחוון ווליום מערכתי 1:1 (עד 200%)"
                     android:textColor="#00E5FF"
                     android:textSize="15sp"
                     android:textStyle="bold" />
@@ -96,7 +96,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:text="מאפשר להגביר עד 200% עם כפתורי הווליום הפיזיים מכל מסך ומשחק בטלפון."
+                    android:text="מחליף את מחוון המערכת בעיצוב מקורי מלא של המכשיר כולל חיווי בלוטות', מצבי צלצול וכפתור כתוביות/טורבו."
                     android:textColor="#D0D8E8"
                     android:textSize="12sp" />
 
@@ -198,13 +198,26 @@
                     android:orientation="horizontal">
 
                     <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnVolMute"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_marginEnd="4dp"
+                        android:layout_weight="1"
+                        android:text="השתק"
+                        android:textColor="#A0AAB8"
+                        android:textSize="11sp"
+                        app:cornerRadius="12dp"
+                        app:strokeColor="#3A465E" />
+
+                    <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnVol100"
                         style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                         android:layout_width="0dp"
                         android:layout_height="44dp"
-                        android:layout_marginEnd="6dp"
+                        android:layout_marginEnd="4dp"
                         android:layout_weight="1"
-                        android:text="100% רגיל"
+                        android:text="100%"
                         android:textColor="#FFFFFF"
                         android:textSize="11sp"
                         app:cornerRadius="12dp"
@@ -215,9 +228,9 @@
                         style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                         android:layout_width="0dp"
                         android:layout_height="44dp"
-                        android:layout_marginEnd="6dp"
+                        android:layout_marginEnd="4dp"
                         android:layout_weight="1"
-                        android:text="150% מוגבר"
+                        android:text="150%"
                         android:textColor="#FFD740"
                         android:textSize="11sp"
                         app:cornerRadius="12dp"
@@ -239,7 +252,7 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- כרטיסיית אפקטים: באס וסראונד -->
+        <!-- כרטיסיית אפקטים: באס, סראונד ואקוסטיקת חדר -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -260,11 +273,12 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="16dp"
-                    android:text="אפקטים אקוסטיים"
+                    android:text="אפקטים אקוסטיים מתקדמים"
                     android:textColor="#FFFFFF"
                     android:textSize="17sp"
                     android:textStyle="bold" />
 
+                <!-- באס -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -298,6 +312,7 @@
                     android:progressTint="#BB86FC"
                     android:thumbTint="#BB86FC" />
 
+                <!-- סראונד 3D -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -326,9 +341,44 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
+                    android:layout_marginBottom="18dp"
                     android:max="1000"
                     android:progressTint="#00E5FF"
                     android:thumbTint="#00E5FF" />
+
+                <!-- אקוסטיקת חדר ואולם (Reverb) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Studio Reverb (אקוסטיקת אולם)"
+                        android:textColor="#D0D8E8"
+                        android:textSize="14sp" />
+
+                    <TextView
+                        android:id="@+id/tvReverbValue"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="ללא"
+                        android:textColor="#FFD740"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <SeekBar
+                    android:id="@+id/seekReverb"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:max="6"
+                    android:progress="0"
+                    android:progressTint="#FFD740"
+                    android:thumbTint="#FFD740" />
 
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
@@ -401,7 +451,7 @@
                 app:strokeColor="#00E676" />
         </LinearLayout>
 
-        <!-- כרטיסיית אקולייזר 5 ערוצים -->
+        <!-- כרטיסיית אקולייזר -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -437,3 +487,4 @@
 
     </LinearLayout>
 </ScrollView>
+ 
