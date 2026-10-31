@@ -39,7 +39,7 @@ import com.google.android.material.card.MaterialCardView
 import kotlin.math.roundToInt
 
 // =========================================================================
-// 1. מנוע סאונד בטוח (מונע התנגשות עם Gemini ומונע לופים באתחול המכשיר)
+// 1. מנוע סאונד בטוח + רשימת כל 21 סגנונות המחוון
 // =========================================================================
 object AudioEngine {
     var loudnessEnhancer: LoudnessEnhancer? = null
@@ -57,7 +57,6 @@ object AudioEngine {
 
     var sliderStyleIndex: Int = 1
 
-    // הגנה מפני לופ ווליום באתחול ומפני התנגשות עם עוזרת קולית (Gemini)
     @Volatile var isInternalVolumeChange: Boolean = false
     var bootCooldownUntil: Long = 0L
     private var playbackCallbackRegistered = false
@@ -73,14 +72,24 @@ object AudioEngine {
         "7. קפסולת iOS מודרנית (Cupertino Pill)",
         "8. רטרו ארקייד 8-Bit (Pixel Blocks)",
         "9. תאורת קצה מסך (Edge Glow Bar)",
-        "10. מטריצת נוריות אולפן (LED Matrix 200%)"
+        "10. מטריצת נוריות אולפן (LED Matrix 200%)",
+        "11. קפסולת גרדיאנט מפוצלת + תפריט (Split Gradient Pill)",
+        "12. אנדרואיד 12 מנטה מודולרי (Material You Mint Split)",
+        "13. פאנל 4 ערוצי ניאון גמיש (4-Channel Neon Matrix)",
+        "14. כרטיסיית 4 עמודות RGB צבעוניות (Colorful Themes Card)",
+        "15. קפסולה לבנה דקה + כפתור Play (Slim Red Accent Pill)",
+        "16. פאנל מחוונים אופקיים מלא (Multi-Stream Volume Panel)",
+        "17. אולפן זהב כהה אנכי (Golden Thin Track & Knob)",
+        "18. מיקסר כחול עמוק 6 ערוצים (Deep Blue Line Mixer)",
+        "19. בר עליון צמוד קצה עם תו מוזיקה (Top Status Bar Strip)",
+        "20. קפסולת Windows / Emoji מדורגת (Segmented Cap Pill)"
     )
 
     fun init(context: Context? = null) {
         context?.let {
             val prefs = it.getSharedPreferences("sound_booster_hd", Context.MODE_PRIVATE)
             currentTotalVolume = prefs.getInt("saved_vol", currentTotalVolume)
-            sliderStyleIndex = prefs.getInt("slider_style", sliderStyleIndex)
+            sliderStyleIndex = prefs.getInt("slider_style", sliderStyleIndex).coerceIn(0, styleNames.lastIndex)
             SliderThemeManager.loadAllStyleConfigs(it)
             registerAssistantSafeRecovery(it.applicationContext)
         }
@@ -116,7 +125,6 @@ object AudioEngine {
         }
     }
 
-    // פותר את באג 5: מרענן בעדינות את חיבור הסאונד כשחלון קופץ של Gemini או עוזרת קולית נסגר/נפתח
     private fun registerAssistantSafeRecovery(appContext: Context) {
         if (playbackCallbackRegistered) return
         val am = appContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
@@ -127,7 +135,6 @@ object AudioEngine {
                 override fun onPlaybackConfigChanged(configs: MutableList<AudioPlaybackConfiguration>?) {
                     super.onPlaybackConfigChanged(configs)
                     if (!isBoosterActive) return
-                    // מוודא שהאפקטים לא ננעלו על ידי ה-Voice Assistant של המערכת
                     val mode = am.mode
                     if (mode == AudioManager.MODE_IN_COMMUNICATION || mode == AudioManager.MODE_IN_CALL) {
                         runCatching { loudnessEnhancer?.setTargetGain(0) }
@@ -147,7 +154,6 @@ object AudioEngine {
             loudnessEnhancer?.enabled = true
             loudnessEnhancer?.setTargetGain(cleanGain)
         }.onFailure {
-            // אם אנדרואיד ניתק את האפקט בגלל גמיני, ניצור אותו מחדש בשקט בלי להפסיק את השיר
             runCatching { loudnessEnhancer?.release() }
             loudnessEnhancer = null
             ensureAudioEffectsCreated()
@@ -160,7 +166,6 @@ object AudioEngine {
             .edit().putInt("slider_style", sliderStyleIndex).apply()
     }
 
-    // מעדכן את איכות הצליל (Clarity & Warmth) דרך ה-Equalizer המובנה בלי לחסום את ערוץ השמע של Gemini!
     fun updateSoundQualityDSP() {
         val eq = equalizer ?: return
         runCatching {
@@ -171,7 +176,6 @@ object AudioEngine {
             if (hiResOptimizerEnabled) {
                 val warmthBoost = ((warmthLevel / 100f) * (maxEQ * 0.35f)).toInt().toShort()
                 val clarityBoost = ((clarityLevel / 100f) * (maxEQ * 0.45f)).toInt().toShort()
-                // חיזוק הרמוני לתדרים הנמוכים (Warmth) ולתדרים הגבוהים (Clarity)
                 eq.setBandLevel(0, warmthBoost)
                 eq.setBandLevel((bands - 1).toShort(), clarityBoost)
             }
@@ -187,7 +191,6 @@ object AudioEngine {
         runCatching { presetReverb?.enabled = enabled }
     }
 
-    // פותר את באג 3: משנה ווליום ללא גרימת לופ אינסופי מול מערכת ההפעלה
     fun applyVolume(context: Context, totalPercent: Int, showNativeSystemUI: Boolean = false) {
         ensureAudioEffectsCreated()
         currentTotalVolume = totalPercent.coerceIn(0, 200)
@@ -197,7 +200,6 @@ object AudioEngine {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
         val maxSysVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
 
-        // אם אנחנו בזמן עליית המכשיר (Boot Cooldown), לעולם לא נקפיץ UI מערכתי כדי למנוע לופ!
         val allowUI = showNativeSystemUI && (SystemClock.elapsedRealtime() > bootCooldownUntil)
         val flags = if (allowUI) AudioManager.FLAG_SHOW_UI else 0
 
@@ -217,13 +219,13 @@ object AudioEngine {
         } finally {
             Handler(Looper.getMainLooper()).postDelayed({
                 isInternalVolumeChange = false
-            }, 120)
+            }, 100)
         }
     }
 }
 
 // =========================================================================
-// 2. המסך הראשי של האפליקציה (5 קטגוריות מלאות + התאמה ייחודית לכל מחוון)
+// 2. המסך הראשי של האפליקציה
 // =========================================================================
 class MainActivity : AppCompatActivity() {
 
@@ -553,7 +555,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     // =========================================================================
-    // קטגוריה 5: התאמה דינמית לכל מחוון (עד 6 צבעים ואלמנטים ייעודיים למחוון הפעיל)
+    // קטגוריה 5: התאמה דינמית לכל 21 המחוונים
     // =========================================================================
     private fun setupSliderDesignCategory() {
         val stylesContainer = findViewById<LinearLayout>(R.id.stylesGridContainer)
@@ -568,7 +570,6 @@ class MainActivity : AppCompatActivity() {
         val seekSat = findViewById<SeekBar>(R.id.seekColorSat)
         val seekVal = findViewById<SeekBar>(R.id.seekColorVal)
 
-        // בקרי אלמנטים ייעודיים למחוון הנוכחי
         val layoutBorderControl = findViewById<View>(R.id.layoutBorderControl)
         val seekBorderWidth = findViewById<SeekBar>(R.id.seekBorderWidth)
         val tvBorderWidthVal = findViewById<TextView>(R.id.tvBorderWidthValue)
@@ -647,7 +648,6 @@ class MainActivity : AppCompatActivity() {
             isUpdatingControlsProgrammatically = false
         }
 
-        // בונה מחדש את כפתורי הצבעים והאלמנטים כך שיתאימו ב-100% למחוון הנוכחי!
         fun syncUIFromCurrentStyleConfig() {
             isUpdatingControlsProgrammatically = true
             val cfg = SliderThemeManager.getCurrentConfig()
@@ -664,7 +664,6 @@ class MainActivity : AppCompatActivity() {
                 )
             }
 
-            // בניית כפתורי הצבעים הייחודיים למחוון שנבחר (למשל 6 צבעים למטריצה/זכוכית, 3 לפשוט)
             colorSlotButtons.clear()
             colorSlotsContainer.removeAllViews()
             for (slotIdx in caps.colorSlotNames.indices) {
@@ -686,7 +685,6 @@ class MainActivity : AppCompatActivity() {
                 colorSlotsContainer.addView(slotBtn)
             }
 
-            // הצגה או הסתרה של בקרי מסגרת, פינות, סמל ואלמנטים ייחודיים לפי המחוון הפעיל
             layoutBorderControl.visibility = if (caps.hasBorder) View.VISIBLE else View.GONE
             seekBorderWidth.progress = cfg.borderWidthDp
             tvBorderWidthVal.text = "${cfg.borderWidthDp} dp"
@@ -744,7 +742,6 @@ class MainActivity : AppCompatActivity() {
             isUpdatingControlsProgrammatically = false
         }
 
-        // יצירת כפתורי 11 העיצובים
         styleButtons.clear()
         stylesContainer.removeAllViews()
         for (i in AudioEngine.styleNames.indices) {
@@ -800,7 +797,6 @@ class MainActivity : AppCompatActivity() {
             VolumeOverlayService.instance?.refreshOverlayLive(updateLayout = false)
         }
 
-        // נגיעה בגלגל הצבעים מזיזה את הבורר אל הנקודה שנלחצה
         colorWheelView.onWheelColorChanged = { pickedColor ->
             isUpdatingControlsProgrammatically = true
             seekHue.progress = colorWheelView.getHueSliderValue()
@@ -810,7 +806,6 @@ class MainActivity : AppCompatActivity() {
             saveAndApplySlotColor(pickedColor)
         }
 
-        // תיקון באג 4: כל 3 המחוונים משנים את הצבעים המצוירים בתוך הגלגל עצמו בלי להזיז את הבורר!
         seekVal.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
                 if (!fromUser || isUpdatingControlsProgrammatically) return
@@ -841,7 +836,6 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(s: SeekBar?) {}
         })
 
-        // מאזינים לאלמנטים הייחודיים של המחוון הנוכחי
         seekBorderWidth.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
                 if (isUpdatingControlsProgrammatically) return
@@ -916,7 +910,6 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(s: SeekBar?) {}
         })
 
-        // שקיפות, טשטוש והשחרה (ללא חסימת מגע)
         seekAlpha.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
                 if (isUpdatingControlsProgrammatically) return
@@ -968,7 +961,6 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(s: SeekBar?) {}
         })
 
-        // מצב עריכת מיקום וגודל עם כפתור סיום מובנה
         btnToggleInteractiveEdit.setOnClickListener {
             val svc = VolumeOverlayService.instance
             if (svc == null) {
@@ -1011,7 +1003,7 @@ class MainActivity : AppCompatActivity() {
         seekHeight.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
                 if (isUpdatingControlsProgrammatically) return
-                val h = p.coerceAtLeast(65)
+                val h = p.coerceAtLeast(40)
                 SliderThemeManager.getCurrentConfig().heightDp = h
                 tvHeightVal.text = "$h dp"
                 SliderThemeManager.saveStyleConfig(this@MainActivity)
@@ -1091,8 +1083,7 @@ class MainActivity : AppCompatActivity() {
 }
 
 // =========================================================================
-// 3. שירות המחוון הצף: כולל שכבת רקע שקופה למגע (Touch-Through Backdrop)
-//    כך שהשחרה וטשטוש לעולם לא חוסמים נגיעות במסך!
+// 3. שירות המחוון הצף: כולל לחיצה רציפה (Hold-to-Volume) והגנה מלאה על צילום מסך!
 // =========================================================================
 class VolumeOverlayService : AccessibilityService() {
 
@@ -1104,7 +1095,6 @@ class VolumeOverlayService : AccessibilityService() {
     private var audioManager: AudioManager? = null
     private var maxSysVol = 15
 
-    // חלון רקע ייעודי עם FLAG_NOT_TOUCHABLE להשחרה וטשטוש ללא חסימת מגע!
     private var backdropTouchThroughView: View? = null
     private var badgeView: TextView? = null
     private var customOverlayCanvasView: CustomThemedSliderOverlayView? = null
@@ -1121,10 +1111,33 @@ class VolumeOverlayService : AccessibilityService() {
         }
     }
 
+    // מנגנון לחיצה רציפה (Continuous Hold) + זיהוי קיצורי מערכת (כמו צילום מסך)
+    private val volumeKeyHandler = Handler(Looper.getMainLooper())
+    private var isVolUpPressed = false
+    private var isVolDownPressed = false
+    private var activeHoldDirection = 0 // +1 = הגברה, -1 = הנמכה, 0 = ללא
+    private var pendingSingleStepApplied = false
+    private var comboShortcutDetected = false
+
+    private val delayedInitialStepRunnable = Runnable {
+        if (comboShortcutDetected || activeHoldDirection == 0) return@Runnable
+        pendingSingleStepApplied = true
+        stepVolumeInDirection(activeHoldDirection, stepAmount = 6)
+        // אם הכפתור עדיין מוחזק לחוץ, מתחילים ריצה רציפה עד עזיבת הכפתור!
+        volumeKeyHandler.postDelayed(holdRepeatRunnable, 240L)
+    }
+
+    private val holdRepeatRunnable = object : Runnable {
+        override fun run() {
+            if (comboShortcutDetected || activeHoldDirection == 0) return
+            stepVolumeInDirection(activeHoldDirection, stepAmount = 5)
+            volumeKeyHandler.postDelayed(this, 95L)
+        }
+    }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
-        // הגנה מפני לופ ווליום ב-4 השניות הראשונות לאחר טעינת השירות/הפעלה מחדש
         AudioEngine.bootCooldownUntil = SystemClock.elapsedRealtime() + 4000L
 
         runCatching {
@@ -1141,50 +1154,105 @@ class VolumeOverlayService : AccessibilityService() {
         if (!AudioEngine.isBoosterActive) return super.onKeyEvent(event)
         if (AudioEngine.isInternalVolumeChange) return false
 
-        if (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP || event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
-            // אם המשתמש נמצא במצב עריכת מיקום ולוחץ על כפתור ווליום, זה שומר ויוצא מיד ממצב העריכה!
-            if (isInteractiveEditActive) {
-                if (event.action == KeyEvent.ACTION_DOWN) {
-                    closeInteractiveEditMode()
+        val keyCode = event.keyCode
+
+        // אם נלחץ כפתור אחר בזמן שלוחצים על ווליום (למשל כפתור Power לצילום מסך),
+        // מבטלים מיד את התערבות האפליקציה ומאפשרים למערכת לבצע את קיצור הדרך!
+        if (keyCode != KeyEvent.KEYCODE_VOLUME_UP && keyCode != KeyEvent.KEYCODE_VOLUME_DOWN) {
+            if (isVolUpPressed || isVolDownPressed) {
+                cancelVolumeHoldForSystemShortcut()
+            }
+            return super.onKeyEvent(event)
+        }
+
+        if (isInteractiveEditActive) {
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                closeInteractiveEditMode()
+            }
+            return true
+        }
+
+        when (event.action) {
+            KeyEvent.ACTION_DOWN -> {
+                if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) isVolUpPressed = true
+                if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) isVolDownPressed = true
+
+                // אם שני כפתורי הווליום נלחצו יחד (קיצור דרך של נגישות/מערכת), לא מתערבים!
+                if (isVolUpPressed && isVolDownPressed) {
+                    cancelVolumeHoldForSystemShortcut()
+                    return false
+                }
+
+                // תחילת הלחיצה הראשונה (repeatCount == 0)
+                if (event.repeatCount == 0 && activeHoldDirection == 0) {
+                    comboShortcutDetected = false
+                    pendingSingleStepApplied = false
+                    activeHoldDirection = if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) 1 else -1
+                    volumeKeyHandler.removeCallbacks(delayedInitialStepRunnable)
+                    volumeKeyHandler.removeCallbacks(holdRepeatRunnable)
+                    // המתנה קצרה של 140ms כדי לוודא שזה לא שילוב כפתורים לצילום מסך
+                    volumeKeyHandler.postDelayed(delayedInitialStepRunnable, 140L)
                 }
                 return true
             }
 
-            if (event.action == KeyEvent.ACTION_DOWN) {
-                val am = audioManager ?: return super.onKeyEvent(event)
-                val curSys = am.getStreamVolume(AudioManager.STREAM_MUSIC)
-                val step = 8
-                val useNativeSystemUI = (AudioEngine.sliderStyleIndex == 0)
+            KeyEvent.ACTION_UP -> {
+                val dirBeforeRelease = activeHoldDirection
+                if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) isVolUpPressed = false
+                if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) isVolDownPressed = false
 
-                if (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
-                    if (curSys < maxSysVol && AudioEngine.currentTotalVolume < 100) {
-                        val nextSys = (curSys + 1).coerceAtMost(maxSysVol)
-                        AudioEngine.currentTotalVolume = ((nextSys.toFloat() / maxSysVol) * 100).roundToInt()
-                    } else {
-                        val baseVol = if (AudioEngine.currentTotalVolume < 100) 100 else AudioEngine.currentTotalVolume
-                        AudioEngine.currentTotalVolume = (baseVol + step).coerceAtMost(200)
-                    }
-                } else {
-                    if (AudioEngine.currentTotalVolume > 100) {
-                        AudioEngine.currentTotalVolume = (AudioEngine.currentTotalVolume - step).coerceAtLeast(100)
-                    } else {
-                        val prevSys = (curSys - 1).coerceAtLeast(0)
-                        AudioEngine.currentTotalVolume = ((prevSys.toFloat() / maxSysVol) * 100).roundToInt()
-                    }
-                }
+                volumeKeyHandler.removeCallbacks(delayedInitialStepRunnable)
+                volumeKeyHandler.removeCallbacks(holdRepeatRunnable)
+                activeHoldDirection = 0
 
-                AudioEngine.applyVolume(this, AudioEngine.currentTotalVolume, showNativeSystemUI = useNativeSystemUI)
-                if (useNativeSystemUI) {
-                    removeCustomOverlay()
-                    showNativeBadgeIfNeeded()
-                } else {
-                    removeBadge()
-                    showCustomThemedOverlay()
+                // אם זו הייתה לחיצה קצרה רגילה (פחות מ-140ms) ולא קיצור דרך, מבצעים צעד ווליום אחד
+                if (!comboShortcutDetected && !pendingSingleStepApplied && dirBeforeRelease != 0) {
+                    stepVolumeInDirection(dirBeforeRelease, stepAmount = 7)
                 }
+                comboShortcutDetected = false
+                pendingSingleStepApplied = false
+                return true
             }
-            return true
         }
         return super.onKeyEvent(event)
+    }
+
+    private fun cancelVolumeHoldForSystemShortcut() {
+        comboShortcutDetected = true
+        activeHoldDirection = 0
+        volumeKeyHandler.removeCallbacks(delayedInitialStepRunnable)
+        volumeKeyHandler.removeCallbacks(holdRepeatRunnable)
+    }
+
+    private fun stepVolumeInDirection(direction: Int, stepAmount: Int) {
+        val am = audioManager ?: return
+        val curSys = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+        val useNativeSystemUI = (AudioEngine.sliderStyleIndex == 0)
+
+        if (direction > 0) {
+            if (curSys < maxSysVol && AudioEngine.currentTotalVolume < 100) {
+                val nextVol = (AudioEngine.currentTotalVolume + stepAmount).coerceAtMost(100)
+                AudioEngine.currentTotalVolume = nextVol
+            } else {
+                val baseVol = if (AudioEngine.currentTotalVolume < 100) 100 else AudioEngine.currentTotalVolume
+                AudioEngine.currentTotalVolume = (baseVol + stepAmount).coerceAtMost(200)
+            }
+        } else {
+            if (AudioEngine.currentTotalVolume > 100) {
+                AudioEngine.currentTotalVolume = (AudioEngine.currentTotalVolume - stepAmount).coerceAtLeast(100)
+            } else {
+                AudioEngine.currentTotalVolume = (AudioEngine.currentTotalVolume - stepAmount).coerceAtLeast(0)
+            }
+        }
+
+        AudioEngine.applyVolume(this, AudioEngine.currentTotalVolume, showNativeSystemUI = useNativeSystemUI)
+        if (useNativeSystemUI) {
+            removeCustomOverlay()
+            showNativeBadgeIfNeeded()
+        } else {
+            removeBadge()
+            showCustomThemedOverlay()
+        }
     }
 
     fun toggleInteractiveEditMode(
@@ -1256,8 +1324,6 @@ class VolumeOverlayService : AccessibilityService() {
         return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, resources.displayMetrics).roundToInt()
     }
 
-    // פותר את באג 1 ב-100%: שכבת השחרה וטשטוש שהיא FLAG_NOT_TOUCHABLE לחלוטין!
-    // כל נגיעה על המסך עוברת ישירות לאפליקציות שמתחת בלי שום חסימה.
     private fun updateTouchThroughBackdrop() {
         val wm = windowManager ?: return
         val cfg = SliderThemeManager.getCurrentConfig()
@@ -1317,7 +1383,7 @@ class VolumeOverlayService : AccessibilityService() {
         val screenH = metrics.heightPixels
 
         val viewW = dp(cfg.widthDp.toFloat()).coerceIn(dp(44f), screenW)
-        val viewH = dp(cfg.heightDp.toFloat()).coerceIn(dp(60f), screenH)
+        val viewH = dp(cfg.heightDp.toFloat()).coerceIn(dp(40f), screenH)
 
         val flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
@@ -1465,11 +1531,23 @@ class VolumeOverlayService : AccessibilityService() {
         removeCustomOverlay()
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        // אם נלכדה התראת מערכת של צילום מסך או תפריט כיבוי, מפסיקים מיד כל פעולת ווליום
+        val pkg = event?.packageName?.toString() ?: ""
+        if (pkg.contains("systemui", ignoreCase = true) && (isVolUpPressed || isVolDownPressed)) {
+            val cls = event?.className?.toString() ?: ""
+            if (cls.contains("Screenshot", ignoreCase = true) || cls.contains("GlobalActions", ignoreCase = true)) {
+                cancelVolumeHoldForSystemShortcut()
+                removeAllOverlays()
+            }
+        }
+    }
+
     override fun onInterrupt() {}
 
     override fun onDestroy() {
         super.onDestroy()
+        volumeKeyHandler.removeCallbacksAndMessages(null)
         removeAllOverlays()
         instance = null
     }
