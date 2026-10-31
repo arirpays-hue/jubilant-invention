@@ -9,13 +9,16 @@ import android.content.res.Configuration
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.PixelFormat
 import android.graphics.RectF
 import android.graphics.drawable.GradientDrawable
+import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
 import android.media.audiofx.LoudnessEnhancer
+import android.media.audiofx.PresetReverb
 import android.media.audiofx.Virtualizer
 import android.os.Build
 import android.os.Bundle
@@ -29,7 +32,6 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.SeekBar
@@ -37,22 +39,22 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
-import androidx.core.content.ContextCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import kotlin.math.roundToInt
 
-// 1. מנוע סאונד מרכזי מוגן מקריסות
+// 1. מנוע סאונד מרכזי מוגן מקריסות עם שמירת נתונים
 object AudioEngine {
     var loudnessEnhancer: LoudnessEnhancer? = null
     var equalizer: Equalizer? = null
     var bassBoost: BassBoost? = null
     var virtualizer: Virtualizer? = null
+    var presetReverb: PresetReverb? = null
 
     var currentTotalVolume: Int = 100
     var isBoosterActive: Boolean = true
 
-    fun init() {
+    fun init(context: Context? = null) {
         if (loudnessEnhancer == null) {
             runCatching { loudnessEnhancer = LoudnessEnhancer(0).apply { enabled = isBoosterActive } }
         }
@@ -65,6 +67,13 @@ object AudioEngine {
         if (virtualizer == null) {
             runCatching { virtualizer = Virtualizer(0, 0).apply { enabled = isBoosterActive } }
         }
+        if (presetReverb == null) {
+            runCatching { presetReverb = PresetReverb(0, 0).apply { enabled = isBoosterActive } }
+        }
+        context?.let {
+            val prefs = it.getSharedPreferences("sound_booster_prefs", Context.MODE_PRIVATE)
+            currentTotalVolume = prefs.getInt("saved_vol", currentTotalVolume)
+        }
     }
 
     fun setEnabled(enabled: Boolean) {
@@ -73,11 +82,15 @@ object AudioEngine {
         runCatching { equalizer?.enabled = enabled }
         runCatching { bassBoost?.enabled = enabled }
         runCatching { virtualizer?.enabled = enabled }
+        runCatching { presetReverb?.enabled = enabled }
     }
 
     fun applyVolume(context: Context, totalPercent: Int) {
         init()
         currentTotalVolume = totalPercent.coerceIn(0, 200)
+        context.getSharedPreferences("sound_booster_prefs", Context.MODE_PRIVATE)
+            .edit().putInt("saved_vol", currentTotalVolume).apply()
+
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
         val maxSysVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
 
@@ -93,6 +106,19 @@ object AudioEngine {
                 loudnessEnhancer?.setTargetGain(extra * 30)
             }
         }
+    }
+
+    fun isBluetoothOutputActive(context: Context): Boolean {
+        val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return false
+        return runCatching {
+            val devices = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            devices.any {
+                it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                it.type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
+                it.type == AudioDeviceInfo.TYPE_BLE_SPEAKER
+            }
+        }.getOrDefault(false)
     }
 }
 
@@ -118,7 +144,7 @@ class MainActivity : AppCompatActivity() {
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         maxSystemVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
 
-        AudioEngine.init()
+        AudioEngine.init(this)
 
         val curSys = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
         if (AudioEngine.currentTotalVolume <= 100) {
@@ -136,7 +162,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateServiceButtonState() {
         if (VolumeOverlayService.instance != null) {
-            btnEnableSystemSlider.text = "✅ מחוון הווליום המערכתי (200%) פעיל!"
+            btnEnableSystemSlider.text = "✅ מחוון הווליום המערכתי 1:1 פעיל!"
             btnEnableSystemSlider.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#00E676"))
         } else {
             btnEnableSystemSlider.text = "הפעל מחוון ווליום מערכתי בהגדרות"
@@ -161,10 +187,13 @@ class MainActivity : AppCompatActivity() {
         val seekVirtualizer = findViewById<SeekBar>(R.id.seekVirtualizer)
         val tvVirtualizerValue = findViewById<TextView>(R.id.tvVirtualizerValue)
 
+        val seekReverb = findViewById<SeekBar>(R.id.seekReverb)
+        val tvReverbValue = findViewById<TextView>(R.id.tvReverbValue)
+
         val eqContainer = findViewById<LinearLayout>(R.id.eqContainer)
 
         btnEnableSystemSlider.setOnClickListener {
-            Toast.makeText(this, "חפש ברשימה 'Sound Booster מחוון ווליום 200%' והפעל אותו", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "הפעל את 'Sound Booster מחוון ווליום 200%'", Toast.LENGTH_LONG).show()
             runCatching { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
         }
 
@@ -214,6 +243,7 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
 
+        findViewById<MaterialButton>(R.id.btnVolMute).setOnClickListener { seekTotalVolume.progress = 0 }
         findViewById<MaterialButton>(R.id.btnVol100).setOnClickListener { seekTotalVolume.progress = 100 }
         findViewById<MaterialButton>(R.id.btnVol150).setOnClickListener { seekTotalVolume.progress = 150 }
         findViewById<MaterialButton>(R.id.btnVol200).setOnClickListener { seekTotalVolume.progress = 200 }
@@ -231,6 +261,16 @@ class MainActivity : AppCompatActivity() {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 tvVirtualizerValue.text = "${progress / 10}%"
                 runCatching { AudioEngine.virtualizer?.setStrength(progress.toShort()) }
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+
+        val reverbNames = listOf("ללא", "חדר קטן", "חדר בינוני", "חדר גדול", "אולם בינוני", "אולם גדול", "פלטה אקוסטית")
+        seekReverb.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                tvReverbValue.text = reverbNames.getOrElse(progress) { "ללא" }
+                runCatching { AudioEngine.presetReverb?.preset = progress.toShort() }
             }
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
@@ -296,16 +336,16 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<MaterialButton>(R.id.btnPresetNormal).setOnClickListener {
-            applyPreset(listOf(0, 0, 0, 0, 0), bass = 0, surround = 0)
+            applyPreset(listOf(0, 0, 0, 0, 0), bass = 0, surround = 0, reverb = 0)
         }
         findViewById<MaterialButton>(R.id.btnPresetBass).setOnClickListener {
-            applyPreset(listOf(85, 55, 0, -10, 25), bass = 850, surround = 300)
+            applyPreset(listOf(85, 55, 0, -10, 25), bass = 850, surround = 300, reverb = 1)
         }
         findViewById<MaterialButton>(R.id.btnPresetVocal).setOnClickListener {
-            applyPreset(listOf(-30, 15, 75, 65, 30), bass = 100, surround = 200)
+            applyPreset(listOf(-30, 15, 75, 65, 30), bass = 100, surround = 200, reverb = 2)
         }
         findViewById<MaterialButton>(R.id.btnPresetGaming).setOnClickListener {
-            applyPreset(listOf(50, 20, -15, 60, 80), bass = 600, surround = 950)
+            applyPreset(listOf(50, 20, -15, 60, 80), bass = 600, surround = 950, reverb = 4)
         }
     }
 
@@ -325,7 +365,7 @@ class MainActivity : AppCompatActivity() {
         return super.onKeyDown(keyCode, event)
     }
 
-    private fun applyPreset(offsetsPercent: List<Int>, bass: Int, surround: Int) {
+    private fun applyPreset(offsetsPercent: List<Int>, bass: Int, surround: Int, reverb: Int) {
         runCatching {
             val eq = AudioEngine.equalizer ?: return
             val minEQ = eq.bandLevelRange[0].toInt()
@@ -340,11 +380,12 @@ class MainActivity : AppCompatActivity() {
 
             findViewById<SeekBar>(R.id.seekBass).progress = bass
             findViewById<SeekBar>(R.id.seekVirtualizer).progress = surround
+            findViewById<SeekBar>(R.id.seekReverb).progress = reverb
         }
     }
 }
 
-// 3. שירות המחוון המערכתי הצף (באותה גרפיקה של המכשיר עד 200%)
+// 3. שירות המחוון המערכתי הצף - העתק 100% מדויק של SystemUI של המכשיר
 class VolumeOverlayService : AccessibilityService() {
 
     companion object {
@@ -357,7 +398,7 @@ class VolumeOverlayService : AccessibilityService() {
 
     private var overlayView: View? = null
     private var nativeSliderView: NativeSystemSliderView? = null
-    private var tvBoostBadge: TextView? = null
+    private var ringerIconView: RingerIconView? = null
 
     private val hideHandler = Handler(Looper.getMainLooper())
     private val hideRunnable = Runnable { removeOverlay() }
@@ -370,10 +411,12 @@ class VolumeOverlayService : AccessibilityService() {
             audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
             maxSysVol = audioManager?.getStreamMaxVolume(AudioManager.STREAM_MUSIC)?.coerceAtLeast(1) ?: 15
 
-            AudioEngine.init()
+            AudioEngine.init(this)
 
             val curSys = audioManager?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: maxSysVol
-            AudioEngine.currentTotalVolume = ((curSys.toFloat() / maxSysVol) * 100).roundToInt()
+            if (AudioEngine.currentTotalVolume <= 100) {
+                AudioEngine.currentTotalVolume = ((curSys.toFloat() / maxSysVol) * 100).roundToInt()
+            }
         }
     }
 
@@ -409,123 +452,130 @@ class VolumeOverlayService : AccessibilityService() {
         }
 
         updateSystemHUD()
-        hideHandler.postDelayed(hideRunnable, 3000)
+        hideHandler.postDelayed(hideRunnable, 3200)
     }
 
-    private fun dp(value: Int): Int {
+    private fun dp(value: Float): Int {
         return TypedValue.applyDimension(
             TypedValue.COMPLEX_UNIT_DIP,
-            value.toFloat(),
+            value,
             resources.displayMetrics
         ).roundToInt()
     }
 
-    private fun getSystemColors(): Triple<Int, Int, Int> {
+    // גווני ה-SystemUI המדויקים מצילום המסך של המכשיר
+    private fun getExactSystemColors(): Triple<Int, Int, Int> {
         val isNight = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val result = runCatching {
-                val pillBg = ContextCompat.getColor(
-                    this,
-                    if (isNight) android.R.color.system_neutral1_800 else android.R.color.system_neutral1_50
-                )
-                val accentColor = ContextCompat.getColor(
-                    this,
-                    if (isNight) android.R.color.system_accent2_300 else android.R.color.system_accent2_600
-                )
-                val trackBg = ContextCompat.getColor(
-                    this,
-                    if (isNight) android.R.color.system_neutral2_700 else android.R.color.system_neutral2_200
-                )
-                Triple(pillBg, accentColor, trackBg)
-            }
-            if (result.isSuccess) return result.getOrThrow()
+        return if (isNight) {
+            Triple(
+                Color.parseColor("#252930"), // רקע קפסולה כהה
+                Color.parseColor("#4B728F"), // כחול-פלדה מערכתי
+                Color.parseColor("#383E47")  // מסילה פנימית
+            )
+        } else {
+            Triple(
+                Color.parseColor("#EEF2F6"), // רקע קפסולה לבן-כחלחל זהה למקור
+                Color.parseColor("#3B607A"), // כחול-פלדה מדויק מצילום המסך המקורי
+                Color.parseColor("#DCE2E8")  // מסילה פנימית בהירה
+            )
         }
-
-        val pillBg = if (isNight) Color.parseColor("#2A2D32") else Color.parseColor("#F2F4F7")
-        val accentColor = Color.parseColor("#456173")
-        val trackBg = if (isNight) Color.parseColor("#3E434C") else Color.parseColor("#DCE2E8")
-        return Triple(pillBg, accentColor, trackBg)
     }
 
     private fun createSystemEqualOverlay() {
         val wm = windowManager ?: return
-        val (pillBgColor, accentColor, trackBgColor) = getSystemColors()
+        val (pillBgColor, accentColor, trackBgColor) = getExactSystemColors()
 
-        val rootPill = LinearLayout(this).apply {
+        // עוטף חיצוני שמכיל את הקפסולה הראשית + הכפתור העגול הנפרד מתחתיה (כמו במקור!)
+        val outerWrapper = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(8), dp(10), dp(8), dp(10))
+        }
+
+        // 1. הקפסולה הראשית בצד ימין
+        val mainPill = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(6f), dp(6f), dp(6f), dp(8f))
             background = GradientDrawable().apply {
                 setColor(pillBgColor)
-                cornerRadius = dp(36).toFloat()
+                cornerRadius = dp(32f).toFloat()
             }
-            elevation = dp(8).toFloat()
+            elevation = dp(6f).toFloat()
         }
 
-        val topRingerCircle = LinearLayout(this).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(44), dp(44)).apply {
-                bottomMargin = dp(8)
+        // 1A. הכפתור העגול העליון (מחליף מצבי צלצול בלחיצה)
+        ringerIconView = RingerIconView(this, accentColor).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(42f), dp(42f)).apply {
+                bottomMargin = dp(10f)
             }
-            gravity = Gravity.CENTER
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(accentColor)
+            setOnClickListener {
+                cycleRingerMode()
+                hideHandler.removeCallbacks(hideRunnable)
+                hideHandler.postDelayed(hideRunnable, 3200)
             }
         }
 
-        val ringerIcon = ImageView(this).apply {
-            setImageResource(android.R.drawable.ic_lock_silent_mode_off)
-            setColorFilter(Color.WHITE)
-            layoutParams = LinearLayout.LayoutParams(dp(22), dp(22))
-        }
-        topRingerCircle.addView(ringerIcon)
-
-        tvBoostBadge = TextView(this).apply {
-            text = "${AudioEngine.currentTotalVolume}%"
-            textSize = 11f
-            setTextColor(accentColor)
-            gravity = Gravity.CENTER
-            setPadding(0, 0, 0, dp(4))
-        }
-
+        // 1B. מחוון הווליום האנכי העבה - ללא קו חוצה באמצע ועם סמל תו + בלוטות'
         nativeSliderView = NativeSystemSliderView(
             context = this,
             activeColor = accentColor,
             trackColor = trackBgColor
         ).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(44), dp(170))
+            layoutParams = LinearLayout.LayoutParams(dp(42f), dp(176f))
             onProgressChanged = { newVol ->
                 AudioEngine.applyVolume(this@VolumeOverlayService, newVol)
                 updateSystemHUD()
                 hideHandler.removeCallbacks(hideRunnable)
-                hideHandler.postDelayed(hideRunnable, 3000)
+                hideHandler.postDelayed(hideRunnable, 3200)
             }
         }
 
-        val bottomDotsBtn = TextView(this).apply {
-            text = "•••"
-            textSize = 16f
-            setTextColor(accentColor)
-            gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(dp(44), dp(38)).apply {
-                topMargin = dp(6)
+        // 1C. שלוש הנקודות בתחתית הקפסולה
+        val bottomDotsView = DotsMenuView(this, accentColor).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(42f), dp(34f)).apply {
+                topMargin = dp(6f)
             }
             setOnClickListener {
                 removeOverlay()
                 runCatching {
-                    val intent = Intent(Settings.ACTION_SOUND_SETTINGS).apply {
+                    // פותח את פאנל הווליום המורחב של אנדרואיד
+                    val panelIntent = Intent("android.settings.panel.action.VOLUME").apply {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
-                    startActivity(intent)
+                    startActivity(panelIntent)
+                }.onFailure {
+                    runCatching {
+                        val appIntent = Intent(this@VolumeOverlayService, MainActivity::class.java).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        startActivity(appIntent)
+                    }
                 }
             }
         }
 
-        rootPill.addView(topRingerCircle)
-        rootPill.addView(tvBoostBadge)
-        rootPill.addView(nativeSliderView)
-        rootPill.addView(bottomDotsBtn)
+        mainPill.addView(ringerIconView)
+        mainPill.addView(nativeSliderView)
+        mainPill.addView(bottomDotsView)
+
+        // 2. הכפתור העגול הנפרד מתחת לקפסולה (בדיוק כמו בצילום המסך המקורי!)
+        // לחיצה עליו מפעילה/מכבה Turbo 200% מיידי
+        val bottomCaptionCircle = CaptionButtonView(this, pillBgColor, accentColor).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(54f), dp(54f)).apply {
+                topMargin = dp(10f)
+            }
+            elevation = dp(6f).toFloat()
+            setOnClickListener {
+                val nextTarget = if (AudioEngine.currentTotalVolume < 200) 200 else 100
+                AudioEngine.applyVolume(this@VolumeOverlayService, nextTarget)
+                updateSystemHUD()
+                hideHandler.removeCallbacks(hideRunnable)
+                hideHandler.postDelayed(hideRunnable, 3200)
+            }
+        }
+
+        outerWrapper.addView(mainPill)
+        outerWrapper.addView(bottomCaptionCircle)
 
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -535,17 +585,31 @@ class VolumeOverlayService : AccessibilityService() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.END or Gravity.CENTER_VERTICAL
-            x = dp(10)
+            x = dp(8f)
         }
 
-        overlayView = rootPill
+        overlayView = outerWrapper
         runCatching { wm.addView(overlayView, params) }
+    }
+
+    private fun cycleRingerMode() {
+        val am = audioManager ?: return
+        runCatching {
+            val nextMode = when (am.ringerMode) {
+                AudioManager.RINGER_MODE_NORMAL -> AudioManager.RINGER_MODE_VIBRATE
+                AudioManager.RINGER_MODE_VIBRATE -> AudioManager.RINGER_MODE_SILENT
+                else -> AudioManager.RINGER_MODE_NORMAL
+            }
+            am.ringerMode = nextMode
+        }
+        ringerIconView?.invalidate()
     }
 
     private fun updateSystemHUD() {
         val vol = AudioEngine.currentTotalVolume
-        nativeSliderView?.setVolumeProgress(vol)
-        tvBoostBadge?.text = if (vol > 100) "⚡$vol%" else "$vol%"
+        val btConnected = AudioEngine.isBluetoothOutputActive(this)
+        nativeSliderView?.updateState(vol, btConnected)
+        ringerIconView?.invalidate()
     }
 
     private fun removeOverlay() {
@@ -564,6 +628,52 @@ class VolumeOverlayService : AccessibilityService() {
         instance = null
     }
 
+    // עיגול עליון עם ציור וקטורי נקי של רמקול (כמו ב-SystemUI המקורי)
+    @SuppressLint("ViewConstructor")
+    inner class RingerIconView(context: Context, private val circleColor: Int) : View(context) {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val path = Path()
+
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            val cx = width / 2f
+            val cy = height / 2f
+            val r = width / 2f
+
+            // עיגול רקע כחול-פלדה
+            paint.style = Paint.Style.FILL
+            paint.color = circleColor
+            canvas.drawCircle(cx, cy, r, paint)
+
+            // אייקון רמקול בקו נקי לבן
+            paint.style = Paint.Style.STROKE
+            paint.color = Color.WHITE
+            paint.strokeWidth = dp(1.8f).toFloat()
+            paint.strokeCap = Paint.Cap.ROUND
+            paint.strokeJoin = Paint.Join.ROUND
+
+            val s = width * 0.22f
+            path.reset()
+            path.moveTo(cx - s * 0.9f, cy - s * 0.35f)
+            path.lineTo(cx - s * 0.4f, cy - s * 0.35f)
+            path.lineTo(cx + s * 0.2f, cy - s * 0.85f)
+            path.lineTo(cx + s * 0.2f, cy + s * 0.85f)
+            path.lineTo(cx - s * 0.4f, cy + s * 0.35f)
+            path.lineTo(cx - s * 0.9f, cy + s * 0.35f)
+            path.close()
+            canvas.drawPath(path, paint)
+
+            val mode = audioManager?.ringerMode ?: AudioManager.RINGER_MODE_NORMAL
+            if (mode == AudioManager.RINGER_MODE_SILENT) {
+                canvas.drawLine(cx - s, cy - s, cx + s, cy + s, paint)
+            } else {
+                val arcRect = RectF(cx + s * 0.1f, cy - s * 0.6f, cx + s * 0.85f, cy + s * 0.6f)
+                canvas.drawArc(arcRect, -45f, 90f, false, paint)
+            }
+        }
+    }
+
+    // מחוון הווליום האנכי של המערכת (ללא קו חוצה, עם תו מוזיקלי + סמל בלוטות')
     @SuppressLint("ViewConstructor")
     inner class NativeSystemSliderView(
         context: Context,
@@ -572,13 +682,16 @@ class VolumeOverlayService : AccessibilityService() {
     ) : View(context) {
 
         private var volumeProgress = 100
+        private var isBluetooth = false
         var onProgressChanged: ((Int) -> Unit)? = null
 
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val rect = RectF()
+        private val btPath = Path()
 
-        fun setVolumeProgress(value: Int) {
+        fun updateState(value: Int, btConnected: Boolean) {
             volumeProgress = value.coerceIn(0, 200)
+            isBluetooth = btConnected
             invalidate()
         }
 
@@ -589,26 +702,59 @@ class VolumeOverlayService : AccessibilityService() {
             if (w <= 0f || h <= 0f) return
             val radius = w / 2f
 
+            // 1. מסילה מלאה מעוגלת
+            paint.style = Paint.Style.FILL
             paint.color = trackColor
             rect.set(0f, 0f, w, h)
             canvas.drawRoundRect(rect, radius, radius, paint)
 
-            val fillRatio = (volumeProgress / 200f).coerceIn(0.12f, 1f)
+            // 2. מילוי אנכי חלק וללא שום קו חוצה באמצע
+            val fillRatio = (volumeProgress / 200f).coerceIn(0.22f, 1f)
             val fillTop = h * (1f - fillRatio)
 
             paint.color = activeColor
             rect.set(0f, fillTop, w, h)
             canvas.drawRoundRect(rect, radius, radius, paint)
 
-            paint.color = Color.argb(70, 255, 255, 255)
-            paint.strokeWidth = 3f
-            canvas.drawLine(w * 0.25f, h / 2f, w * 0.75f, h / 2f, paint)
+            // 3. ציור תו מוזיקה + סמל בלוטות' בחלק העליון של המילוי (כמו במקור)
+            val iconCenterY = (fillTop + w * 0.52f).coerceAtMost(h - w * 0.48f)
+            drawMusicAndBluetoothIcon(canvas, w / 2f, iconCenterY, w)
+        }
 
+        private fun drawMusicAndBluetoothIcon(canvas: Canvas, cx: Float, cy: Float, w: Float) {
             paint.color = Color.WHITE
-            paint.textSize = w * 0.42f
-            paint.textAlign = Paint.Align.CENTER
-            val noteY = (fillTop + w * 0.65f).coerceAtMost(h - w * 0.35f)
-            canvas.drawText("♪", w / 2f, noteY, paint)
+            paint.style = Paint.Style.FILL
+
+            val offsetX = if (isBluetooth) -w * 0.08f else 0f
+            val noteX = cx + offsetX
+
+            // עיגול תחתון של התו
+            canvas.drawCircle(noteX - dp(2f), cy + dp(4f), dp(3.5f).toFloat(), paint)
+
+            // רגל התו ודגלון עליון
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = dp(2f).toFloat()
+            paint.strokeCap = Paint.Cap.ROUND
+            canvas.drawLine(noteX + dp(1f), cy + dp(4f), noteX + dp(1f), cy - dp(6f), paint)
+            canvas.drawLine(noteX + dp(1f), cy - dp(6f), noteX + dp(5.5f), cy - dp(3.5f), paint)
+
+            // סמל בלוטות' קטן מימין לתו (כמו בצילום המסך המקורי של המכשיר!)
+            if (isBluetooth) {
+                paint.strokeWidth = dp(1.3f).toFloat()
+                val bx = cx + w * 0.16f
+                val by = cy
+                val bs = dp(4.5f).toFloat()
+
+                btPath.reset()
+                btPath.moveTo(bx, by - bs)
+                btPath.lineTo(bx, by + bs)
+                btPath.lineTo(bx + bs * 0.65f, by + bs * 0.5f)
+                btPath.lineTo(bx - bs * 0.55f, by - bs * 0.45f)
+                btPath.moveTo(bx - bs * 0.55f, by + bs * 0.45f)
+                btPath.lineTo(bx + bs * 0.65f, by - bs * 0.5f)
+                btPath.lineTo(bx, by - bs)
+                canvas.drawPath(btPath, paint)
+            }
         }
 
         @SuppressLint("ClickableViewAccessibility")
@@ -618,13 +764,72 @@ class VolumeOverlayService : AccessibilityService() {
                     if (height > 0) {
                         val touchRatio = 1f - (event.y / height.toFloat()).coerceIn(0f, 1f)
                         val newVol = (touchRatio * 200).roundToInt()
-                        setVolumeProgress(newVol)
+                        volumeProgress = newVol.coerceIn(0, 200)
+                        invalidate()
                         onProgressChanged?.invoke(volumeProgress)
                     }
                     return true
                 }
             }
             return super.onTouchEvent(event)
+        }
+    }
+
+    // שלוש הנקודות האופקיות בתחתית הקפסולה
+    @SuppressLint("ViewConstructor")
+    inner class DotsMenuView(context: Context, private val dotColor: Int) : View(context) {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.FILL
+            color = dotColor
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            val cx = width / 2f
+            val cy = height / 2f
+            val r = dp(2.2f).toFloat()
+            val gap = dp(6.5f).toFloat()
+
+            canvas.drawCircle(cx - gap, cy, r, paint)
+            canvas.drawCircle(cx, cy, r, paint)
+            canvas.drawCircle(cx + gap, cy, r, paint)
+        }
+    }
+
+    // הכפתור העגול הנפרד מתחת לקפסולה (אייקון Live Caption כמו בצילום המסך המקורי)
+    @SuppressLint("ViewConstructor")
+    inner class CaptionButtonView(
+        context: Context,
+        private val bgColor: Int,
+        private val iconColor: Int
+    ) : View(context) {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val boxRect = RectF()
+
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            val cx = width / 2f
+            val cy = height / 2f
+
+            // עיגול לבן-אפרפר זהה לקפסולה
+            paint.style = Paint.Style.FILL
+            paint.color = bgColor
+            canvas.drawCircle(cx, cy, width / 2f, paint)
+
+            // אייקון כתוביות עם קו אלכסוני זהה לזה שבצילום המסך המקורי
+            paint.style = Paint.Style.STROKE
+            paint.color = iconColor
+            paint.strokeWidth = dp(1.8f).toFloat()
+            paint.strokeCap = Paint.Cap.ROUND
+
+            val bw = dp(16f).toFloat()
+            val bh = dp(12f).toFloat()
+            boxRect.set(cx - bw / 2f, cy - bh / 2f, cx + bw / 2f, cy + bh / 2f)
+            canvas.drawRoundRect(boxRect, dp(2.5f).toFloat(), dp(2.5f).toFloat(), paint)
+
+            // קווים פנימיים וקו אלכסוני
+            canvas.drawLine(cx - bw * 0.28f, cy + bh * 0.15f, cx + bw * 0.25f, cy + bh * 0.15f, paint)
+            canvas.drawLine(cx - bw * 0.6f, cy - bh * 0.65f, cx + bw * 0.6f, cy + bh * 0.65f, paint)
         }
     }
 }
