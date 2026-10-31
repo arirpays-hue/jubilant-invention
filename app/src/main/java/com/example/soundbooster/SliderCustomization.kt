@@ -18,248 +18,222 @@ import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
 // =========================================================================
-// 1. מפרט ייעודי לכל מחוון בנפרד (שמות הצבעים, האם יש מסגרת, ואלמנטים ייחודיים)
+// 1. מפרט ייעודי לכל אחד מ-21 סוגי המחוונים (0..10 המקוריים + 11..20 החדשים)
 // =========================================================================
 data class StyleCapabilities(
     val styleIndex: Int,
-    val colorSlotNames: List<String>, // עד 6 צבעים מותאמים בדיוק לאלמנטים של אותו מחוון
+    val colorSlotNames: List<String>,
     val hasBorder: Boolean,
     val hasCornerRadius: Boolean,
     val hasIcon: Boolean,
-    val extraElementLabel1: String?,  // למשל: "מספר עמודות גל" או "עובי טבעת חוגה"
-    val extraElementLabel2: String?   // למשל: "מרווח בין קוביות" או "עוצמת ברק זכוכית"
+    val extraElementLabel1: String?,
+    val extraElementLabel2: String?
 )
 
 data class StyleConfig(
-    var colors: IntArray,             // 6 חריצי צבעים ייחודיים למחוון
-    var sliderAlphaPercent: Int,      // 15% - 100%
+    var colors: IntArray,
+    var sliderAlphaPercent: Int,
     var blurBackgroundEnabled: Boolean,
-    var blurStrengthPercent: Int,     // 0% - 100%
+    var blurStrengthPercent: Int,
     var dimBackgroundEnabled: Boolean,
-    var dimStrengthPercent: Int,      // 0% - 100%
+    var dimStrengthPercent: Int,
     var widthDp: Int,
     var heightDp: Int,
     var posXPercent: Int,
     var posYPercent: Int,
     var cornerRadiusDp: Int,
-    var borderWidthDp: Int,           // עובי מסגרת (אם קיימת במחוון)
-    var iconSizePercent: Int,         // גודל סמל וקטורי (50% - 160%)
-    var textSizeSp: Int,              // גודל טקסט אחוזים (9 - 22 sp)
-    var extraParam1: Int,             // 0 - 100 (פרמטר אלמנט ייחודי 1)
-    var extraParam2: Int              // 0 - 100 (פרמטר אלמנט ייחודי 2)
+    var borderWidthDp: Int,
+    var iconSizePercent: Int,
+    var textSizeSp: Int,
+    var extraParam1: Int,
+    var extraParam2: Int
 ) {
     fun copyConfig(): StyleConfig = copy(colors = colors.clone())
 }
 
 object SliderThemeManager {
 
-    // הגדרת היכולות והצבעים המדויקים של כל אחד מ-11 המחוונים
+    const val TOTAL_STYLES_COUNT = 21
+
     val styleCapabilities = mapOf(
         0 to StyleCapabilities(
-            styleIndex = 0,
-            colorSlotNames = listOf("רקע בועית HD", "מסגרת בועית", "טקסט אחוזים"),
-            hasBorder = true, hasCornerRadius = true, hasIcon = false,
-            extraElementLabel1 = "ריווח פנימי של הבועית",
-            extraElementLabel2 = null
+            0, listOf("רקע בועית HD", "מסגרת בועית", "טקסט אחוזים"),
+            true, true, false, "ריווח פנימי של הבועית", null
         ),
         1 to StyleCapabilities(
-            styleIndex = 1,
-            colorSlotNames = listOf("נוזל זכוכית עליון", "נוזל זכוכית תחתון", "רקע זכוכית חלבית", "מסגרת זכוכית", "טקסט וסמל", "ברק השתקפות עליון"),
-            hasBorder = true, hasCornerRadius = true, hasIcon = true,
-            extraElementLabel1 = "עוצמת ברק השתקפות הזכוכית",
-            extraElementLabel2 = "עובי צינור המילוי הפנימי"
+            1, listOf("נוזל זכוכית עליון", "נוזל זכוכית תחתון", "רקע זכוכית חלבית", "מסגרת זכוכית", "טקסט וסמל", "ברק השתקפות עליון"),
+            true, true, true, "עוצמת ברק השתקפות הזכוכית", "עובי צינור המילוי הפנימי"
         ),
         2 to StyleCapabilities(
-            styleIndex = 2,
-            colorSlotNames = listOf("פס מילוי ראשי", "מסילה אחורית", "טקסט וסמל"),
-            hasBorder = false, hasCornerRadius = true, hasIcon = true,
-            extraElementLabel1 = "עובי פס המילוי ביחס לרוחב",
-            extraElementLabel2 = null
+            2, listOf("פס מילוי ראשי", "מסילה אחורית", "טקסט וסמל"),
+            false, true, true, "עובי פס המילוי ביחס לרוחב", null
         ),
         3 to StyleCapabilities(
-            styleIndex = 3,
-            colorSlotNames = listOf("פס התקדמות פעיל", "ידית גרירה עגולה", "מסילה אפורה", "רקע תיבת דיאלוג", "מסגרת תיבה", "טקסט וסמל רמקול"),
-            hasBorder = true, hasCornerRadius = true, hasIcon = true,
-            extraElementLabel1 = "גודל ידית הגרירה העגולה",
-            extraElementLabel2 = "עובי פס ההתקדמות האופקי"
+            3, listOf("פס התקדמות פעיל", "ידית גרירה עגולה", "מסילה אפורה", "רקע תיבת דיאלוג", "מסגרת תיבה", "טקסט וסמל רמקול"),
+            true, true, true, "גודל ידית הגרירה העגולה", "עובי פס ההתקדמות האופקי"
         ),
         4 to StyleCapabilities(
-            styleIndex = 4,
-            colorSlotNames = listOf("מילוי ניאון ראשי", "הילת ניאון משנית", "רקע סייבר כהה", "מסגרת ניאון חיצונית", "טקסט דיגיטלי", "סמל ברק ורמקול"),
-            hasBorder = true, hasCornerRadius = true, hasIcon = true,
-            extraElementLabel1 = "עוצמת זוהר פנימי (Cyber Glow)",
-            extraElementLabel2 = "מרווח מסגרת כפולה"
+            4, listOf("מילוי ניאון ראשי", "הילת ניאון משנית", "רקע סייבר כהה", "מסגרת ניאון חיצונית", "טקסט דיגיטלי", "סמל ברק ורמקול"),
+            true, true, true, "עוצמת זוהר פנימי (Cyber Glow)", "מרווח מסגרת כפולה"
         ),
         5 to StyleCapabilities(
-            styleIndex = 5,
-            colorSlotNames = listOf("קשת חוגה פעילה", "קשת שיא ( מעל 150% )", "מסילת חוגה כבויה", "רקע קופסת אולפן", "מסגרת אולפן", "טקסט וסמל"),
-            hasBorder = true, hasCornerRadius = true, hasIcon = true,
-            extraElementLabel1 = "עובי טבעת החוגה האנלוגית",
-            extraElementLabel2 = "רדיוס קשת החוגה"
+            5, listOf("קשת חוגה פעילה", "קשת שיא (מעל 150%)", "מסילת חוגה כבויה", "רקע קופסת אולפן", "מסגרת אולפן", "טקסט וסמל"),
+            true, true, true, "עובי טבעת החוגה האנלוגית", "רדיוס קשת החוגה"
         ),
         6 to StyleCapabilities(
-            styleIndex = 6,
-            colorSlotNames = listOf("גלים תחתונים (0-100%)", "גלים עליונים (100-200%)", "גלים כבויים", "רקע מחוון", "מסגרת מחוון", "טקסט וסמל"),
-            hasBorder = true, hasCornerRadius = true, hasIcon = true,
-            extraElementLabel1 = "כמות עמודות גלי הקול",
-            extraElementLabel2 = "מרווח אנכי בין הגלים"
+            6, listOf("גלים תחתונים (0-100%)", "גלים עליונים (100-200%)", "גלים כבויים", "רקע מחוון", "מסגרת מחוון", "טקסט וסמל"),
+            true, true, true, "כמות עמודות גלי הקול", "מרווח אנכי בין הגלים"
         ),
         7 to StyleCapabilities(
-            styleIndex = 7,
-            colorSlotNames = listOf("מילוי קפסולה", "רקע קפסולה", "מסגרת עדינה", "טקסט וסמל פנימי"),
-            hasBorder = true, hasCornerRadius = true, hasIcon = true,
-            extraElementLabel1 = "רוחב קפסולה פנימית",
-            extraElementLabel2 = null
+            7, listOf("מילוי קפסולה", "רקע קפסולה", "מסגרת עדינה", "טקסט וסמל פנימי"),
+            true, true, true, "רוחב קפסולה פנימית", null
         ),
         8 to StyleCapabilities(
-            styleIndex = 8,
-            colorSlotNames = listOf("קוביות 8-Bit דולקות", "קוביות שיא (200%)", "קוביות כבויות", "רקע ארקייד", "מסגרת פיקסל", "טקסט וסמל פיקסל"),
-            hasBorder = true, hasCornerRadius = false, hasIcon = true,
-            extraElementLabel1 = "מספר קוביות פיקסל",
-            extraElementLabel2 = "מרווח בין קוביות"
+            8, listOf("קוביות 8-Bit דולקות", "קוביות שיא (200%)", "קוביות כבויות", "רקע ארקייד", "מסגרת פיקסל", "טקסט וסמל פיקסל"),
+            true, false, true, "מספר קוביות פיקסל", "מרווח בין קוביות"
         ),
         9 to StyleCapabilities(
-            styleIndex = 9,
-            colorSlotNames = listOf("פס תאורת קצה", "רקע מסילה דקה", "טקסט אחוזים צף"),
-            hasBorder = false, hasCornerRadius = true, hasIcon = false,
-            extraElementLabel1 = "עובי פס הקצה",
-            extraElementLabel2 = "מרחק הטקסט מפס הקצה"
+            9, listOf("פס תאורת קצה", "רקע מסילה דקה", "טקסט אחוזים צף"),
+            false, true, false, "עובי פס הקצה", "מרחק הטקסט מפס הקצה"
         ),
         10 to StyleCapabilities(
-            styleIndex = 10,
-            colorSlotNames = listOf("נוריות ירוקות (רגיל)", "נוריות צהובות (מוגבר)", "נוריות אדומות (שיא 200%)", "נוריות כבויות", "רקע לוח מטריצה", "מסגרת וטקסט"),
-            hasBorder = true, hasCornerRadius = true, hasIcon = true,
-            extraElementLabel1 = "מספר שורות נוריות LED",
-            extraElementLabel2 = "מספר עמודות נוריות LED"
+            10, listOf("נוריות ירוקות (רגיל)", "נוריות צהובות (מוגבר)", "נוריות אדומות (שיא 200%)", "נוריות כבויות", "רקע לוח מטריצה", "מסגרת וטקסט"),
+            true, true, true, "מספר שורות נוריות LED", "מספר עמודות נוריות LED"
+        ),
+        // --- 10 המחוונים החדשים מהתמונות ---
+        11 to StyleCapabilities(
+            11, listOf("גרדיאנט עליון", "גרדיאנט תחתון", "רקע קפסולה ראשית", "מסגרת קפסולה", "סמלים וטקסט", "רקע קפסולת תפריט תחתונה"),
+            true, true, true, "יחס גובה קפסולה מול תפריט", "מרווח הפרדה אנכי"
+        ),
+        12 to StyleCapabilities(
+            12, listOf("מילוי מנטה ראשי", "רקע מסילה כהה", "רקע כפתורים תחתונים", "מסגרת", "צבע תו וסמלים", "צבע טקסט אחוזים"),
+            false, true, true, "עיגול מילוי פנימי", "מרווח בין כפתורי המודול"
+        ),
+        13 to StyleCapabilities(
+            13, listOf("ניאון ערוץ ראשי", "ניאון ערוצים משניים", "רקע כרטיסיית ניאון", "מסגרת ניאון זוהרת", "סמלים ומסילות", "טקסט כותרת"),
+            true, true, true, "גודל נקודת אחיזה זוהרת", "עובי קווי הניאון"
+        ),
+        14 to StyleCapabilities(
+            14, listOf("גרדיאנט עמודות עליון", "גרדיאנט עמודות תחתון", "רקע כרטיסייה", "מסגרת כרטיסייה", "רקע חריץ עמודה", "סמלים וטקסט"),
+            true, true, true, "רוחב עמודות הקפסולה", null
+        ),
+        15 to StyleCapabilities(
+            15, listOf("קו מילוי וכפתור Play", "מסילה דקה אחורית", "רקע קפסולה לבנה/בהירה", "מסגרת קפסולה", "טקסט וחצים", "משולש Play פנימי"),
+            true, true, true, "עובי קו המילוי הדק", "רוחב הקפסולה"
+        ),
+        16 to StyleCapabilities(
+            16, listOf("מילוי פסים אופקיים", "רקע מסילות אופקיות", "רקע חלון הפאנל", "מסגרת הפאנל", "כותרות ערוצים", "סמלים פנימיים"),
+            true, true, true, "רדיוס פינות הפסים", null
+        ),
+        17 to StyleCapabilities(
+            17, listOf("קו זהב פעיל", "עיגול אחיזה (Knob)", "רקע עמודה כהה", "מסגרת עמודה", "מסילה אחורית דקה", "סמל תו וטקסט זהב"),
+            true, true, true, "גודל עיגול האחיזה", "עובי קו הזהב"
+        ),
+        18 to StyleCapabilities(
+            18, listOf("קווי עוצמה אנכיים", "ידיות עגולות לבנות", "רקע מיקסר כחול כהה", "מסגרת מיקסר", "רקע תגית עליונה", "סמלים וטקסט"),
+            true, true, true, "גודל ידיות העיגולים", null
+        ),
+        19 to StyleCapabilities(
+            19, listOf("גרדיאנט שמאל", "גרדיאנט ימין", "רקע בר עליון", "מסגרת בר", "תו מוזיקה וטקסט", "צבע משני"),
+            true, true, true, "עובי בר עליון", null
+        ),
+        20 to StyleCapabilities(
+            20, listOf("מילוי עליון", "מילוי תחתון", "רקע קפסולה", "מסגרת קפסולה", "עיגול ראש מודגש", "סמל וטקסט"),
+            true, true, true, "רוחב קפסולה", null
         )
     )
 
     private val defaultConfigs = mapOf(
         0 to StyleConfig(
-            colors = intArrayOf(
-                Color.parseColor("#EEF2F6"), Color.parseColor("#3B607A"), Color.parseColor("#1B2C38"),
-                Color.WHITE, Color.WHITE, Color.WHITE
-            ),
-            sliderAlphaPercent = 95, blurBackgroundEnabled = false, blurStrengthPercent = 30,
-            dimBackgroundEnabled = false, dimStrengthPercent = 0,
-            widthDp = 125, heightDp = 52, posXPercent = 94, posYPercent = 25,
-            cornerRadiusDp = 24, borderWidthDp = 2, iconSizePercent = 100, textSizeSp = 13,
-            extraParam1 = 50, extraParam2 = 50
+            intArrayOf(Color.parseColor("#EEF2F6"), Color.parseColor("#3B607A"), Color.parseColor("#1B2C38"), Color.WHITE, Color.WHITE, Color.WHITE),
+            95, false, 30, false, 0, 125, 52, 94, 25, 24, 2, 100, 13, 50, 50
         ),
         1 to StyleConfig(
-            colors = intArrayOf(
-                Color.parseColor("#00E5FF"), Color.parseColor("#0077FF"), Color.parseColor("#E8F4FF"),
-                Color.parseColor("#FFFFFF"), Color.parseColor("#0B192C"), Color.parseColor("#FFFFFF")
-            ),
-            sliderAlphaPercent = 68, blurBackgroundEnabled = true, blurStrengthPercent = 65,
-            dimBackgroundEnabled = false, dimStrengthPercent = 15,
-            widthDp = 86, heightDp = 285, posXPercent = 94, posYPercent = 50,
-            cornerRadiusDp = 34, borderWidthDp = 2, iconSizePercent = 100, textSizeSp = 13,
-            extraParam1 = 70, extraParam2 = 65
+            intArrayOf(Color.parseColor("#00E5FF"), Color.parseColor("#0077FF"), Color.parseColor("#E8F4FF"), Color.parseColor("#FFFFFF"), Color.parseColor("#0B192C"), Color.parseColor("#FFFFFF")),
+            72, true, 65, false, 15, 76, 275, 94, 50, 36, 2, 95, 13, 70, 65
         ),
         2 to StyleConfig(
-            colors = intArrayOf(
-                Color.parseColor("#00E676"), Color.parseColor("#222B3A"), Color.parseColor("#FFFFFF"),
-                Color.WHITE, Color.WHITE, Color.WHITE
-            ),
-            sliderAlphaPercent = 92, blurBackgroundEnabled = false, blurStrengthPercent = 20,
-            dimBackgroundEnabled = false, dimStrengthPercent = 0,
-            widthDp = 64, heightDp = 260, posXPercent = 95, posYPercent = 50,
-            cornerRadiusDp = 28, borderWidthDp = 0, iconSizePercent = 100, textSizeSp = 12,
-            extraParam1 = 60, extraParam2 = 50
+            intArrayOf(Color.parseColor("#00E676"), Color.parseColor("#222B3A"), Color.parseColor("#FFFFFF"), Color.WHITE, Color.WHITE, Color.WHITE),
+            92, false, 20, false, 0, 64, 260, 95, 50, 30, 0, 95, 12, 60, 50
         ),
         3 to StyleConfig(
-            colors = intArrayOf(
-                Color.parseColor("#33B5E5"), Color.parseColor("#00E5FF"), Color.parseColor("#444E5E"),
-                Color.parseColor("#1B2028"), Color.parseColor("#33B5E5"), Color.parseColor("#FFFFFF")
-            ),
-            sliderAlphaPercent = 95, blurBackgroundEnabled = false, blurStrengthPercent = 0,
-            dimBackgroundEnabled = false, dimStrengthPercent = 20,
-            widthDp = 310, heightDp = 90, posXPercent = 50, posYPercent = 12,
-            cornerRadiusDp = 8, borderWidthDp = 2, iconSizePercent = 100, textSizeSp = 13,
-            extraParam1 = 55, extraParam2 = 50
+            intArrayOf(Color.parseColor("#33B5E5"), Color.parseColor("#00E5FF"), Color.parseColor("#444E5E"), Color.parseColor("#1B2028"), Color.parseColor("#33B5E5"), Color.parseColor("#FFFFFF")),
+            95, false, 0, false, 20, 310, 90, 50, 12, 8, 2, 100, 13, 55, 50
         ),
         4 to StyleConfig(
-            colors = intArrayOf(
-                Color.parseColor("#FF007F"), Color.parseColor("#00F0FF"), Color.parseColor("#0D0221"),
-                Color.parseColor("#00F0FF"), Color.parseColor("#00F0FF"), Color.parseColor("#FF007F")
-            ),
-            sliderAlphaPercent = 92, blurBackgroundEnabled = true, blurStrengthPercent = 50,
-            dimBackgroundEnabled = false, dimStrengthPercent = 30,
-            widthDp = 88, heightDp = 290, posXPercent = 94, posYPercent = 50,
-            cornerRadiusDp = 6, borderWidthDp = 3, iconSizePercent = 105, textSizeSp = 13,
-            extraParam1 = 75, extraParam2 = 50
+            intArrayOf(Color.parseColor("#FF007F"), Color.parseColor("#00F0FF"), Color.parseColor("#0D0221"), Color.parseColor("#00F0FF"), Color.parseColor("#00F0FF"), Color.parseColor("#FF007F")),
+            92, true, 50, false, 30, 84, 285, 94, 50, 8, 3, 100, 13, 75, 50
         ),
         5 to StyleConfig(
-            colors = intArrayOf(
-                Color.parseColor("#00E676"), Color.parseColor("#FF5252"), Color.parseColor("#323B4D"),
-                Color.parseColor("#181D26"), Color.parseColor("#4E5869"), Color.parseColor("#FFD740")
-            ),
-            sliderAlphaPercent = 94, blurBackgroundEnabled = true, blurStrengthPercent = 40,
-            dimBackgroundEnabled = false, dimStrengthPercent = 20,
-            widthDp = 128, heightDp = 240, posXPercent = 90, posYPercent = 50,
-            cornerRadiusDp = 28, borderWidthDp = 2, iconSizePercent = 100, textSizeSp = 14,
-            extraParam1 = 60, extraParam2 = 70
+            intArrayOf(Color.parseColor("#00E676"), Color.parseColor("#FF5252"), Color.parseColor("#323B4D"), Color.parseColor("#181D26"), Color.parseColor("#4E5869"), Color.parseColor("#FFD740")),
+            94, true, 40, false, 20, 126, 240, 90, 50, 28, 2, 100, 14, 60, 70
         ),
         6 to StyleConfig(
-            colors = intArrayOf(
-                Color.parseColor("#00E5FF"), Color.parseColor("#BB86FC"), Color.parseColor("#2A3346"),
-                Color.parseColor("#141824"), Color.parseColor("#BB86FC"), Color.parseColor("#FFFFFF")
-            ),
-            sliderAlphaPercent = 90, blurBackgroundEnabled = true, blurStrengthPercent = 50,
-            dimBackgroundEnabled = false, dimStrengthPercent = 15,
-            widthDp = 88, heightDp = 285, posXPercent = 94, posYPercent = 50,
-            cornerRadiusDp = 30, borderWidthDp = 2, iconSizePercent = 100, textSizeSp = 12,
-            extraParam1 = 60, extraParam2 = 50
+            intArrayOf(Color.parseColor("#00E5FF"), Color.parseColor("#BB86FC"), Color.parseColor("#2A3346"), Color.parseColor("#141824"), Color.parseColor("#BB86FC"), Color.parseColor("#FFFFFF")),
+            90, true, 50, false, 15, 84, 280, 94, 50, 30, 2, 95, 12, 60, 50
         ),
         7 to StyleConfig(
-            colors = intArrayOf(
-                Color.parseColor("#FFFFFF"), Color.parseColor("#2B3548"), Color.parseColor("#80FFFFFF"),
-                Color.parseColor("#00E5FF"), Color.WHITE, Color.WHITE
-            ),
-            sliderAlphaPercent = 82, blurBackgroundEnabled = true, blurStrengthPercent = 75,
-            dimBackgroundEnabled = false, dimStrengthPercent = 10,
-            widthDp = 78, heightDp = 270, posXPercent = 94, posYPercent = 50,
-            cornerRadiusDp = 38, borderWidthDp = 1, iconSizePercent = 100, textSizeSp = 12,
-            extraParam1 = 75, extraParam2 = 50
+            intArrayOf(Color.parseColor("#FFFFFF"), Color.parseColor("#2B3548"), Color.parseColor("#80FFFFFF"), Color.parseColor("#101824"), Color.WHITE, Color.WHITE),
+            85, true, 75, false, 10, 74, 265, 94, 50, 38, 1, 95, 12, 75, 50
         ),
         8 to StyleConfig(
-            colors = intArrayOf(
-                Color.parseColor("#39FF14"), Color.parseColor("#FF2A55"), Color.parseColor("#222831"),
-                Color.parseColor("#0F1217"), Color.parseColor("#39FF14"), Color.parseColor("#39FF14")
-            ),
-            sliderAlphaPercent = 96, blurBackgroundEnabled = false, blurStrengthPercent = 0,
-            dimBackgroundEnabled = false, dimStrengthPercent = 25,
-            widthDp = 88, heightDp = 280, posXPercent = 94, posYPercent = 50,
-            cornerRadiusDp = 0, borderWidthDp = 3, iconSizePercent = 100, textSizeSp = 12,
-            extraParam1 = 55, extraParam2 = 45
+            intArrayOf(Color.parseColor("#39FF14"), Color.parseColor("#FF2A55"), Color.parseColor("#222831"), Color.parseColor("#0F1217"), Color.parseColor("#39FF14"), Color.parseColor("#39FF14")),
+            96, false, 0, false, 25, 86, 280, 94, 50, 0, 3, 100, 12, 55, 45
         ),
         9 to StyleConfig(
-            colors = intArrayOf(
-                Color.parseColor("#00E5FF"), Color.parseColor("#1B2434"), Color.parseColor("#00E5FF"),
-                Color.WHITE, Color.WHITE, Color.WHITE
-            ),
-            sliderAlphaPercent = 92, blurBackgroundEnabled = false, blurStrengthPercent = 30,
-            dimBackgroundEnabled = false, dimStrengthPercent = 0,
-            widthDp = 64, heightDp = 310, posXPercent = 99, posYPercent = 50,
-            cornerRadiusDp = 18, borderWidthDp = 0, iconSizePercent = 100, textSizeSp = 12,
-            extraParam1 = 55, extraParam2 = 60
+            intArrayOf(Color.parseColor("#00E5FF"), Color.parseColor("#1B2434"), Color.parseColor("#00E5FF"), Color.WHITE, Color.WHITE, Color.WHITE),
+            92, false, 30, false, 0, 64, 310, 99, 50, 18, 0, 100, 12, 55, 60
         ),
         10 to StyleConfig(
-            colors = intArrayOf(
-                Color.parseColor("#00E676"), Color.parseColor("#FFD740"), Color.parseColor("#FF5252"),
-                Color.parseColor("#222B38"), Color.parseColor("#10141D"), Color.parseColor("#FFFFFF")
-            ),
-            sliderAlphaPercent = 94, blurBackgroundEnabled = true, blurStrengthPercent = 45,
-            dimBackgroundEnabled = false, dimStrengthPercent = 20,
-            widthDp = 92, heightDp = 295, posXPercent = 94, posYPercent = 50,
-            cornerRadiusDp = 22, borderWidthDp = 2, iconSizePercent = 100, textSizeSp = 12,
-            extraParam1 = 65, extraParam2 = 50
+            intArrayOf(Color.parseColor("#00E676"), Color.parseColor("#FFD740"), Color.parseColor("#FF5252"), Color.parseColor("#222B38"), Color.parseColor("#10141D"), Color.parseColor("#FFFFFF")),
+            94, true, 45, false, 20, 88, 290, 94, 50, 24, 2, 95, 12, 65, 50
+        ),
+        // --- ברירות המחדל של 10 המחוונים החדשים מהתמונות ---
+        11 to StyleConfig(
+            intArrayOf(Color.parseColor("#00C6FF"), Color.parseColor("#00F2FE"), Color.parseColor("#1F2937"), Color.parseColor("#FFFFFF"), Color.parseColor("#111827"), Color.parseColor("#F3F4F6")),
+            94, true, 55, false, 10, 72, 310, 94, 50, 36, 2, 100, 12, 70, 45
+        ),
+        12 to StyleConfig(
+            intArrayOf(Color.parseColor("#B5DDD1"), Color.parseColor("#23272A"), Color.parseColor("#B5DDD1"), Color.parseColor("#3A465E"), Color.parseColor("#111417"), Color.parseColor("#FFFFFF")),
+            95, true, 45, false, 10, 68, 320, 8, 55, 22, 0, 100, 12, 60, 40
+        ),
+        13 to StyleConfig(
+            intArrayOf(Color.parseColor("#39FF14"), Color.parseColor("#A3FF00"), Color.parseColor("#110926"), Color.parseColor("#B026FF"), Color.parseColor("#E0E6FF"), Color.parseColor("#39FF14")),
+            92, true, 65, false, 25, 235, 255, 50, 50, 26, 2, 95, 13, 55, 50
+        ),
+        14 to StyleConfig(
+            intArrayOf(Color.parseColor("#FF2CDF"), Color.parseColor("#00E5FF"), Color.parseColor("#140D2B"), Color.parseColor("#7928CA"), Color.parseColor("#251B42"), Color.parseColor("#FFFFFF")),
+            94, true, 60, false, 20, 230, 250, 50, 50, 26, 2, 95, 13, 65, 50
+        ),
+        15 to StyleConfig(
+            intArrayOf(Color.parseColor("#A91D22"), Color.parseColor("#F2C6C8"), Color.parseColor("#FFFFFF"), Color.parseColor("#E2E8F0"), Color.parseColor("#1E293B"), Color.parseColor("#FFFFFF")),
+            96, true, 40, false, 10, 62, 285, 94, 48, 30, 1, 95, 11, 45, 75
+        ),
+        16 to StyleConfig(
+            intArrayOf(Color.parseColor("#4ADE80"), Color.parseColor("#1F2421"), Color.parseColor("#121514"), Color.parseColor("#2E3833"), Color.parseColor("#F1F5F9"), Color.parseColor("#0F172A")),
+            95, true, 60, true, 25, 305, 275, 50, 45, 24, 1, 100, 12, 55, 50
+        ),
+        17 to StyleConfig(
+            intArrayOf(Color.parseColor("#EAB308"), Color.parseColor("#78716C"), Color.parseColor("#262626"), Color.parseColor("#404040"), Color.parseColor("#525252"), Color.parseColor("#FACC15")),
+            92, true, 50, false, 15, 68, 280, 94, 50, 22, 1, 100, 12, 55, 45
+        ),
+        18 to StyleConfig(
+            intArrayOf(Color.parseColor("#E2E8F0"), Color.parseColor("#FFFFFF"), Color.parseColor("#172554"), Color.parseColor("#1E3A8A"), Color.parseColor("#1E40AF"), Color.parseColor("#FFFFFF")),
+            94, true, 60, false, 20, 290, 235, 50, 50, 20, 2, 95, 12, 55, 50
+        ),
+        19 to StyleConfig(
+            intArrayOf(Color.parseColor("#8B5CF6"), Color.parseColor("#3B82F6"), Color.parseColor("#1E1B4B"), Color.parseColor("#6366F1"), Color.parseColor("#FFFFFF"), Color.parseColor("#00E676")),
+            95, false, 0, false, 0, 340, 44, 50, 2, 14, 1, 95, 12, 50, 50
+        ),
+        20 to StyleConfig(
+            intArrayOf(Color.parseColor("#F59E0B"), Color.parseColor("#D97706"), Color.parseColor("#27272A"), Color.parseColor("#52525B"), Color.parseColor("#FDE047"), Color.parseColor("#FFFFFF")),
+            94, true, 45, false, 10, 70, 270, 94, 50, 34, 2, 95, 12, 65, 50
         )
     )
 
@@ -277,13 +251,13 @@ object SliderThemeManager {
 
     fun getCurrentConfig(): StyleConfig {
         return configs.getOrPut(AudioEngine.sliderStyleIndex) {
-            defaultConfigs[1]!!.copyConfig()
+            (defaultConfigs[AudioEngine.sliderStyleIndex] ?: defaultConfigs[1]!!).copyConfig()
         }
     }
 
     fun loadAllStyleConfigs(context: Context) {
-        val prefs = context.getSharedPreferences("sound_booster_per_style_v3", Context.MODE_PRIVATE)
-        for (idx in 0..10) {
+        val prefs = context.getSharedPreferences("sound_booster_per_style_v4", Context.MODE_PRIVATE)
+        for (idx in 0 until TOTAL_STYLES_COUNT) {
             val def = defaultConfigs[idx] ?: defaultConfigs[1]!!
             val loadedColors = IntArray(6) { cIdx ->
                 prefs.getInt("s_${idx}_c_$cIdx", def.colors.getOrElse(cIdx) { Color.WHITE })
@@ -311,7 +285,7 @@ object SliderThemeManager {
 
     fun saveStyleConfig(context: Context, idx: Int = AudioEngine.sliderStyleIndex) {
         val cfg = configs[idx] ?: return
-        val editor = context.getSharedPreferences("sound_booster_per_style_v3", Context.MODE_PRIVATE).edit()
+        val editor = context.getSharedPreferences("sound_booster_per_style_v4", Context.MODE_PRIVATE).edit()
         for (cIdx in 0..5) {
             editor.putInt("s_${idx}_c_$cIdx", cfg.colors[cIdx])
         }
@@ -341,7 +315,7 @@ object SliderThemeManager {
 }
 
 // =========================================================================
-// 2. גלגל צבעים שבו כל 3 המחוונים משנים את הגלגל עצמו בלי להזיז את הבורר!
+// 2. גלגל צבעים חכם
 // =========================================================================
 class TrueColorWheelView(context: Context) : View(context) {
     private val wheelPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -365,14 +339,11 @@ class TrueColorWheelView(context: Context) : View(context) {
         style = Paint.Style.FILL
     }
 
-    // מיקום הבורר הפיזי על הגלגל (נעול וזז רק כשנוגעים בגלגל עצמו!)
     private var pointerAngleDeg = 190f
     private var pointerRadiusRatio = 0.85f
-
-    // 3 פרמטרים מהמחוונים שמשנים את מראה הגלגל עצמו בזמן אמת
-    private var wheelRotationOffsetDeg = 0f // 0..360 (מחוון גוון מסובב את צבעי הגלגל עצמו)
-    private var wheelMaxSaturation = 1.0f   // 0..1 (מחוון רוויה משנה את רוויית כל הגלגל)
-    private var wheelBrightnessVal = 1.0f   // 0.05..1 (מחוון בהירות משנה את בהירות כל הגלגל)
+    private var wheelRotationOffsetDeg = 0f
+    private var wheelMaxSaturation = 1.0f
+    private var wheelBrightnessVal = 1.0f
 
     var onWheelColorChanged: ((Int) -> Unit)? = null
 
@@ -391,7 +362,6 @@ class TrueColorWheelView(context: Context) : View(context) {
     fun getSatSliderValue(): Int = ((pointerRadiusRatio * wheelMaxSaturation) * 100f).roundToInt().coerceIn(0, 100)
     fun getValSliderValue(): Int = (wheelBrightnessVal * 100f).roundToInt().coerceIn(5, 100)
 
-    // שלוש הפונקציות הללו משנות את הצבעים המצוירים בתוך הגלגל עצמו מבלי להזיז את הבורר!
     fun updateWheelBrightness(valPercent: Int): Int {
         wheelBrightnessVal = (valPercent / 100f).coerceIn(0.05f, 1f)
         invalidate()
@@ -426,7 +396,6 @@ class TrueColorWheelView(context: Context) : View(context) {
         val radius = min(cx, cy) * 0.88f
         if (radius <= 0f) return
 
-        // ציור היקף הגלגל לפי היסט הגוון, הרוויה המקסימלית והבהירות שנבחרו במחוונים
         val hueColors = IntArray(13) { i ->
             val h = (i * 30f + wheelRotationOffsetDeg) % 360f
             Color.HSVToColor(floatArrayOf(h, wheelMaxSaturation, wheelBrightnessVal))
@@ -434,7 +403,6 @@ class TrueColorWheelView(context: Context) : View(context) {
         wheelPaint.shader = SweepGradient(cx, cy, hueColors, null)
         canvas.drawCircle(cx, cy, radius, wheelPaint)
 
-        // מרכז הגלגל מאפשר צבעים בהירים/לבנים (Saturation = 0) בבהירות הנוכחית
         val centerColor = Color.HSVToColor(floatArrayOf(0f, 0f, wheelBrightnessVal))
         centerOverlayPaint.shader = RadialGradient(
             cx, cy, radius,
@@ -443,7 +411,6 @@ class TrueColorWheelView(context: Context) : View(context) {
         canvas.drawCircle(cx, cy, radius, centerOverlayPaint)
         canvas.drawCircle(cx, cy, radius, borderPaint)
 
-        // הבורר נשאר בדיוק בזווית ובמרחק שלו בזמן שהגלגל מתחתיו משתנה!
         val angleRad = Math.toRadians(pointerAngleDeg.toDouble())
         val dist = pointerRadiusRatio * radius
         val sx = (cx + cos(angleRad) * dist).toFloat()
@@ -480,7 +447,7 @@ class TrueColorWheelView(context: Context) : View(context) {
 }
 
 // =========================================================================
-// 3. ציור סמלים וקטוריים מותאמים לכל מחוון
+// 3. ציור סמלים וקטוריים בסיסיים
 // =========================================================================
 object VectorIconRenderer {
     private val iconPath = Path()
@@ -579,7 +546,7 @@ object VectorIconRenderer {
 }
 
 // =========================================================================
-// 4. תצוגת המחוון המותאם אישית לכל סגנון (6 צבעים + אלמנטים + כפתור סיום עריכה)
+// 4. תצוגת המחוון הצף (עם תיקון מלא לקצוות העגולים ותמיכה בכל 21 העיצובים!)
 // =========================================================================
 class CustomThemedSliderOverlayView(
     context: Context,
@@ -631,425 +598,430 @@ class CustomThemedSliderOverlayView(
 
         val cornerPx = dp(cfg.cornerRadiusDp.toFloat())
         val brdW = dp(cfg.borderWidthDp.toFloat())
-        val icoSize = dp(18f * (cfg.iconSizePercent / 100f))
+        val icoSize = dp(17f * (cfg.iconSizePercent / 100f))
         val txtPx = sp(cfg.textSizeSp.toFloat())
-
-        // אם במצב עריכה, שומרים מקום בראש המחוון לכפתור "✓ סיים ושמור"
         val topEditOffset = if (isEditPositionMode) dp(36f) else 0f
 
-        when (AudioEngine.sliderStyleIndex) {
-            // 1. עיצוב הזכוכית (Glassmorphism - 6 צבעים ואלמנטים מותאמים)
-            1 -> {
-                val pad = dp(6f)
-                rect.set(pad, pad + topEditOffset, w - pad, h - pad)
+        // אם נבחר אחד מ-10 העיצובים החדשים (11..20), מצייר דרך ExtendedSkinsRenderer
+        if (AudioEngine.sliderStyleIndex >= 11) {
+            ExtendedSkinsRenderer.drawExtendedStyle(
+                styleIndex = AudioEngine.sliderStyleIndex,
+                canvas = canvas, w = w, h = h, topEditOffset = topEditOffset,
+                vol = vol, ratio = ratio, cfg = cfg,
+                c0 = c0, c1 = c1, c2 = c2, c3 = c3, c4 = c4, c5 = c5,
+                cornerPx = cornerPx, brdW = brdW, icoSize = icoSize, txtPx = txtPx,
+                dpFn = ::dp, paint = paint
+            )
+        } else {
+            // סגנונות 1..10 עם תיקון מלא לקצוות העגולים (אין גלישת סמלים מתחת לקו ההגברה!)
+            val pad = dp(6f)
+            rect.set(pad, pad + topEditOffset, w - pad, h - pad)
+            val safePillRad = min(cornerPx, rect.width() / 2f)
+            val safeVerticalInset = max(safePillRad * 0.65f, dp(22f))
 
-                val highlightStrength = (cfg.extraParam1 / 100f).coerceIn(0.1f, 1f)
-                paint.style = Paint.Style.FILL
-                paint.shader = LinearGradient(
-                    0f, rect.top, w, rect.bottom,
-                    c2,
-                    applyAlpha(cfg.colors[5], (alphaPct * highlightStrength).roundToInt()),
-                    Shader.TileMode.CLAMP
-                )
-                canvas.drawRoundRect(rect, cornerPx, cornerPx, paint)
-                paint.shader = null
+            when (AudioEngine.sliderStyleIndex) {
+                1 -> {
+                    val highlightStrength = (cfg.extraParam1 / 100f).coerceIn(0.1f, 1f)
+                    paint.style = Paint.Style.FILL
+                    paint.shader = LinearGradient(
+                        0f, rect.top, w, rect.bottom,
+                        c2, applyAlpha(cfg.colors[5], (alphaPct * highlightStrength).roundToInt()),
+                        Shader.TileMode.CLAMP
+                    )
+                    canvas.drawRoundRect(rect, safePillRad, safePillRad, paint)
+                    paint.shader = null
 
-                val tubeRatio = 0.35f + (cfg.extraParam2 / 100f) * 0.45f
-                val tubeW = (rect.width() * tubeRatio).coerceAtLeast(dp(16f))
-                val trackLeft = w / 2f - tubeW / 2f
-                val trackRight = w / 2f + tubeW / 2f
-                val trackTop = rect.top + dp(32f)
-                val trackBot = rect.bottom - dp(34f)
-                val fillTop = trackBot - (trackBot - trackTop) * ratio
+                    canvas.save()
+                    clipPath.reset()
+                    clipPath.addRoundRect(rect, safePillRad, safePillRad, Path.Direction.CW)
+                    canvas.clipPath(clipPath)
 
-                innerRect.set(trackLeft, trackTop, trackRight, trackBot)
-                paint.color = applyAlpha(cfg.colors[3], 25)
-                canvas.drawRoundRect(innerRect, cornerPx, cornerPx, paint)
+                    val tubeRatio = 0.35f + (cfg.extraParam2 / 100f) * 0.45f
+                    val tubeW = (rect.width() * tubeRatio).coerceAtLeast(dp(14f))
+                    val trackLeft = w / 2f - tubeW / 2f
+                    val trackRight = w / 2f + tubeW / 2f
+                    val trackTop = rect.top + safeVerticalInset + dp(12f)
+                    val trackBot = rect.bottom - safeVerticalInset - dp(14f)
+                    val fillTop = trackBot - (trackBot - trackTop) * ratio
 
-                innerRect.set(trackLeft, fillTop, trackRight, trackBot)
-                paint.shader = LinearGradient(
-                    0f, fillTop, 0f, trackBot,
-                    c0, c1, Shader.TileMode.CLAMP
-                )
-                canvas.drawRoundRect(innerRect, cornerPx, cornerPx, paint)
-                paint.shader = null
+                    innerRect.set(trackLeft, trackTop, trackRight, trackBot)
+                    paint.color = applyAlpha(cfg.colors[3], 28)
+                    canvas.drawRoundRect(innerRect, tubeW / 2f, tubeW / 2f, paint)
 
-                if (brdW > 0f) {
-                    paint.style = Paint.Style.STROKE
-                    paint.strokeWidth = brdW
-                    paint.color = c3
-                    canvas.drawRoundRect(rect, cornerPx, cornerPx, paint)
-                }
+                    innerRect.set(trackLeft, fillTop, trackRight, trackBot)
+                    paint.shader = LinearGradient(0f, fillTop, 0f, trackBot, c0, c1, Shader.TileMode.CLAMP)
+                    canvas.drawRoundRect(innerRect, tubeW / 2f, tubeW / 2f, paint)
+                    paint.shader = null
 
-                paint.style = Paint.Style.FILL
-                paint.color = cfg.colors[4]
-                paint.textSize = txtPx
-                paint.textAlign = Paint.Align.CENTER
-                canvas.drawText("$vol%", w / 2f, rect.top + dp(22f), paint)
+                    paint.style = Paint.Style.FILL
+                    paint.color = cfg.colors[4]
+                    paint.textSize = txtPx
+                    paint.textAlign = Paint.Align.CENTER
+                    canvas.drawText("$vol%", w / 2f, rect.top + safeVerticalInset, paint)
 
-                VectorIconRenderer.drawStyledSpeakerIcon(
-                    canvas, w / 2f, rect.bottom - dp(17f), icoSize, cfg.colors[4], 1, vol, paint
-                )
-            }
+                    VectorIconRenderer.drawStyledSpeakerIcon(
+                        canvas, w / 2f, rect.bottom - safeVerticalInset * 0.78f, icoSize, cfg.colors[4], 1, vol, paint
+                    )
+                    canvas.restore()
 
-            // 2. עיצוב פשוט ונקי (Simple Minimal)
-            2 -> {
-                val widthFactor = 0.25f + (cfg.extraParam1 / 100f) * 0.6f
-                val barW = w * widthFactor
-                val left = (w - barW) / 2f
-                rect.set(left, dp(12f) + topEditOffset, left + barW, h - dp(12f))
-                paint.style = Paint.Style.FILL
-                paint.color = c1
-                canvas.drawRoundRect(rect, cornerPx, cornerPx, paint)
-
-                val fillTop = rect.bottom - rect.height() * ratio
-                innerRect.set(left, fillTop, left + barW, rect.bottom)
-                paint.color = c0
-                canvas.drawRoundRect(innerRect, cornerPx, cornerPx, paint)
-
-                paint.color = cfg.colors[2]
-                paint.textSize = txtPx
-                paint.textAlign = Paint.Align.CENTER
-                canvas.drawText("$vol%", w / 2f, rect.top + dp(20f), paint)
-
-                VectorIconRenderer.drawStyledSpeakerIcon(
-                    canvas, w / 2f, rect.bottom - dp(18f), icoSize, cfg.colors[2], 2, vol, paint
-                )
-            }
-
-            // 3. עיצוב אנדרואיד ישן (Retro Android Holo Horizontal - 6 צבעים)
-            3 -> {
-                rect.set(dp(6f), dp(6f) + topEditOffset, w - dp(6f), h - dp(6f))
-                paint.style = Paint.Style.FILL
-                paint.color = c3
-                canvas.drawRoundRect(rect, cornerPx, cornerPx, paint)
-
-                if (brdW > 0f) {
-                    paint.style = Paint.Style.STROKE
-                    paint.strokeWidth = brdW
-                    paint.color = c4
-                    canvas.drawRoundRect(rect, cornerPx, cornerPx, paint)
-                }
-
-                val lineY = rect.top + rect.height() * 0.65f
-                val startX = dp(52f)
-                val endX = w - dp(22f)
-                val thumbX = startX + (endX - startX) * ratio
-
-                VectorIconRenderer.drawStyledSpeakerIcon(
-                    canvas, dp(28f), lineY - dp(2f), icoSize, c5, 3, vol, paint
-                )
-
-                val lineThick = dp(2f + (cfg.extraParam2 / 100f) * 6f)
-                paint.style = Paint.Style.STROKE
-                paint.strokeWidth = lineThick
-                paint.color = c2
-                canvas.drawLine(startX, lineY, endX, lineY, paint)
-
-                paint.color = c0
-                canvas.drawLine(startX, lineY, thumbX, lineY, paint)
-
-                val thumbRad = dp(5f + (cfg.extraParam1 / 100f) * 8f)
-                paint.style = Paint.Style.FILL
-                paint.color = c1
-                canvas.drawCircle(thumbX, lineY, thumbRad, paint)
-
-                paint.color = c5
-                paint.textSize = txtPx
-                paint.textAlign = Paint.Align.LEFT
-                canvas.drawText("עוצמת שמע: $vol%", startX, rect.top + rect.height() * 0.36f, paint)
-            }
-
-            // 4. סייבר ניאון זוהר (Cyberpunk Neon - 6 צבעים)
-            4 -> {
-                val pad = dp(8f)
-                rect.set(pad, pad + topEditOffset, w - pad, h - pad)
-                paint.style = Paint.Style.FILL
-                paint.color = c2
-                canvas.drawRoundRect(rect, cornerPx, cornerPx, paint)
-
-                if (brdW > 0f) {
-                    paint.style = Paint.Style.STROKE
-                    paint.strokeWidth = brdW
-                    paint.color = c3
-                    canvas.drawRoundRect(rect, cornerPx, cornerPx, paint)
-                }
-
-                val innerGap = dp(4f + (cfg.extraParam2 / 100f) * 10f)
-                val trackTop = rect.top + dp(34f)
-                val trackBot = rect.bottom - dp(34f)
-                val fillTop = trackBot - (trackBot - trackTop) * ratio
-
-                innerRect.set(rect.left + innerGap, fillTop, rect.right - innerGap, trackBot)
-                paint.style = Paint.Style.FILL
-                paint.shader = LinearGradient(0f, fillTop, 0f, trackBot, c1, c0, Shader.TileMode.CLAMP)
-                canvas.drawRoundRect(innerRect, cornerPx * 0.5f, cornerPx * 0.5f, paint)
-                paint.shader = null
-
-                paint.color = cfg.colors[4]
-                paint.textSize = txtPx
-                paint.textAlign = Paint.Align.CENTER
-                canvas.drawText("$vol%", w / 2f, rect.top + dp(23f), paint)
-
-                VectorIconRenderer.drawStyledSpeakerIcon(
-                    canvas, w / 2f, rect.bottom - dp(18f), icoSize, c5, 4, vol, paint
-                )
-            }
-
-            // 5. חוגת אולפן אנלוגית (Studio Rotary Knob - 6 צבעים)
-            5 -> {
-                val pad = dp(6f)
-                rect.set(pad, pad + topEditOffset, w - pad, h - pad)
-                paint.style = Paint.Style.FILL
-                paint.color = c3
-                canvas.drawRoundRect(rect, cornerPx, cornerPx, paint)
-
-                if (brdW > 0f) {
-                    paint.style = Paint.Style.STROKE
-                    paint.strokeWidth = brdW
-                    paint.color = c4
-                    canvas.drawRoundRect(rect, cornerPx, cornerPx, paint)
-                }
-
-                val cx = w / 2f
-                val cy = rect.top + rect.height() * 0.46f
-                val radScale = 0.24f + (cfg.extraParam2 / 100f) * 0.16f
-                val r = min(w, rect.height()) * radScale
-                innerRect.set(cx - r, cy - r, cx + r, cy + r)
-
-                val ringStroke = dp(4f + (cfg.extraParam1 / 100f) * 8f)
-                paint.style = Paint.Style.STROKE
-                paint.strokeWidth = ringStroke
-                paint.color = c2
-                paint.strokeCap = Paint.Cap.ROUND
-                canvas.drawArc(innerRect, 135f, 270f, false, paint)
-
-                paint.color = if (vol > 150) c1 else c0
-                canvas.drawArc(innerRect, 135f, 270f * ratio, false, paint)
-
-                paint.style = Paint.Style.FILL
-                paint.color = c5
-                paint.textSize = txtPx
-                paint.textAlign = Paint.Align.CENTER
-                canvas.drawText("$vol%", cx, cy + dp(5f), paint)
-
-                VectorIconRenderer.drawStyledSpeakerIcon(
-                    canvas, cx, rect.bottom - dp(22f), icoSize, c5, 5, vol, paint
-                )
-            }
-
-            // 6. גלי קול דינמיים (Live Sound Wave - 6 צבעים)
-            6 -> {
-                val pad = dp(6f)
-                rect.set(pad, pad + topEditOffset, w - pad, h - pad)
-                paint.style = Paint.Style.FILL
-                paint.color = c3
-                canvas.drawRoundRect(rect, cornerPx, cornerPx, paint)
-
-                if (brdW > 0f) {
-                    paint.style = Paint.Style.STROKE
-                    paint.strokeWidth = brdW
-                    paint.color = c4
-                    canvas.drawRoundRect(rect, cornerPx, cornerPx, paint)
-                }
-
-                val bars = (8 + (cfg.extraParam1 / 100f) * 16).roundToInt().coerceIn(6, 26)
-                val topSpace = rect.top + dp(32f)
-                val botSpace = rect.bottom - dp(32f)
-                val stepY = (botSpace - topSpace) / bars
-                val activeBars = (bars * ratio).roundToInt()
-                val thicknessRatio = (0.85f - (cfg.extraParam2 / 100f) * 0.45f).coerceIn(0.3f, 0.85f)
-
-                paint.style = Paint.Style.FILL
-                for (i in 0 until bars) {
-                    val idxFromBottom = bars - 1 - i
-                    val y = topSpace + i * stepY
-                    val waveFactor = 0.32f + 0.52f * abs(sin(i * 0.65f))
-                    val bw = rect.width() * waveFactor
-                    val left = (w - bw) / 2f
-
-                    paint.color = when {
-                        idxFromBottom >= activeBars -> c2
-                        idxFromBottom >= bars / 2 -> c1
-                        else -> c0
+                    if (brdW > 0f) {
+                        paint.style = Paint.Style.STROKE
+                        paint.strokeWidth = brdW
+                        paint.color = c3
+                        canvas.drawRoundRect(rect, safePillRad, safePillRad, paint)
                     }
-                    innerRect.set(left, y, left + bw, y + stepY * thicknessRatio)
-                    canvas.drawRoundRect(innerRect, dp(4f), dp(4f), paint)
                 }
 
-                paint.color = c5
-                paint.textSize = txtPx
-                paint.textAlign = Paint.Align.CENTER
-                canvas.drawText("$vol%", w / 2f, rect.top + dp(22f), paint)
+                2 -> {
+                    val widthFactor = 0.38f + (cfg.extraParam1 / 100f) * 0.52f
+                    val barW = w * widthFactor
+                    val left = (w - barW) / 2f
+                    rect.set(left, dp(10f) + topEditOffset, left + barW, h - dp(10f))
+                    val rad = min(cornerPx, barW / 2f)
 
-                VectorIconRenderer.drawStyledSpeakerIcon(
-                    canvas, w / 2f, rect.bottom - dp(16f), icoSize, c5, 6, vol, paint
-                )
-            }
-
-            // 7. קפסולת iOS מודרנית (Cupertino Pill)
-            7 -> {
-                val widthFactor = 0.45f + (cfg.extraParam1 / 100f) * 0.42f
-                val pillW = w * widthFactor
-                val left = (w - pillW) / 2f
-                rect.set(left, dp(8f) + topEditOffset, left + pillW, h - dp(8f))
-                val rad = cornerPx.coerceAtLeast(pillW / 2f)
-
-                paint.style = Paint.Style.FILL
-                paint.color = c1
-                canvas.drawRoundRect(rect, rad, rad, paint)
-
-                val fillTop = rect.bottom - rect.height() * ratio
-                canvas.save()
-                clipPath.reset()
-                clipPath.addRoundRect(rect, rad, rad, Path.Direction.CW)
-                canvas.clipPath(clipPath)
-
-                innerRect.set(left, fillTop, left + pillW, rect.bottom)
-                paint.color = c0
-                canvas.drawRect(innerRect, paint)
-                canvas.restore()
-
-                if (brdW > 0f) {
-                    paint.style = Paint.Style.STROKE
-                    paint.strokeWidth = brdW
-                    paint.color = c2
+                    paint.style = Paint.Style.FILL
+                    paint.color = c1
                     canvas.drawRoundRect(rect, rad, rad, paint)
+
+                    canvas.save()
+                    clipPath.reset()
+                    clipPath.addRoundRect(rect, rad, rad, Path.Direction.CW)
+                    canvas.clipPath(clipPath)
+
+                    val fillTop = rect.bottom - rect.height() * ratio
+                    innerRect.set(left, fillTop, left + barW, rect.bottom)
+                    paint.color = c0
+                    canvas.drawRect(innerRect, paint)
+
+                    val inset = max(rad * 0.68f, dp(20f))
+                    paint.color = cfg.colors[2]
+                    paint.textSize = txtPx * 0.9f
+                    paint.textAlign = Paint.Align.CENTER
+                    canvas.drawText("$vol%", w / 2f, rect.top + inset, paint)
+
+                    VectorIconRenderer.drawStyledSpeakerIcon(
+                        canvas, w / 2f, rect.bottom - inset * 0.85f, icoSize * 0.9f, cfg.colors[2], 2, vol, paint
+                    )
+                    canvas.restore()
                 }
 
-                paint.style = Paint.Style.FILL
-                paint.color = cfg.colors[3]
-                paint.textSize = txtPx
-                paint.textAlign = Paint.Align.CENTER
-                canvas.drawText("$vol%", w / 2f, rect.top + dp(24f), paint)
-
-                VectorIconRenderer.drawStyledSpeakerIcon(
-                    canvas, w / 2f, rect.bottom - dp(22f), icoSize, cfg.colors[3], 7, vol, paint
-                )
-            }
-
-            // 8. רטרו ארקייד 8-Bit (Pixel Blocks - 6 צבעים)
-            8 -> {
-                val pad = dp(8f)
-                rect.set(pad, pad + topEditOffset, w - pad, h - pad)
-                paint.style = Paint.Style.FILL
-                paint.color = c3
-                canvas.drawRect(rect, paint)
-
-                if (brdW > 0f) {
-                    paint.style = Paint.Style.STROKE
-                    paint.strokeWidth = brdW
-                    paint.color = c4
-                    canvas.drawRect(rect, paint)
-                }
-
-                val blocks = (6 + (cfg.extraParam1 / 100f) * 14).roundToInt().coerceIn(6, 20)
-                val gapPx = dp(1f + (cfg.extraParam2 / 100f) * 5f)
-                val startY = rect.top + dp(32f)
-                val endY = rect.bottom - dp(32f)
-                val blockH = (endY - startY) / blocks
-                val lit = (blocks * ratio).roundToInt()
-
-                paint.style = Paint.Style.FILL
-                for (i in 0 until blocks) {
-                    val idxFromBottom = blocks - 1 - i
-                    paint.color = when {
-                        idxFromBottom >= lit -> c2
-                        idxFromBottom >= (blocks * 0.75f).roundToInt() -> c1
-                        else -> c0
-                    }
-                    val by = startY + i * blockH
-                    canvas.drawRect(rect.left + dp(8f), by + gapPx, rect.right - dp(8f), by + blockH - gapPx, paint)
-                }
-
-                paint.color = c5
-                paint.textSize = txtPx
-                paint.textAlign = Paint.Align.CENTER
-                canvas.drawText("$vol%", w / 2f, rect.top + dp(21f), paint)
-
-                VectorIconRenderer.drawStyledSpeakerIcon(
-                    canvas, w / 2f, rect.bottom - dp(15f), icoSize, c5, 8, vol, paint
-                )
-            }
-
-            // 9. תאורת קצה מסך (Edge Glow Bar)
-            9 -> {
-                val barW = dp(6f + (cfg.extraParam1 / 100f) * 18f)
-                val isRight = cfg.posXPercent >= 50
-                val xPos = if (isRight) w - barW - dp(4f) else dp(4f)
-                rect.set(xPos, dp(10f) + topEditOffset, xPos + barW, h - dp(10f))
-
-                paint.style = Paint.Style.FILL
-                paint.color = c1
-                canvas.drawRoundRect(rect, cornerPx, cornerPx, paint)
-
-                val fillTop = rect.bottom - rect.height() * ratio
-                innerRect.set(xPos, fillTop, xPos + barW, rect.bottom)
-                paint.color = c0
-                canvas.drawRoundRect(innerRect, cornerPx, cornerPx, paint)
-
-                paint.color = cfg.colors[2]
-                paint.textSize = txtPx
-                paint.textAlign = Paint.Align.CENTER
-                val distPx = dp(16f + (cfg.extraParam2 / 100f) * 20f)
-                val textX = if (isRight) xPos - distPx else xPos + barW + distPx
-                val safeY = fillTop.coerceIn(rect.top + dp(18f), h - dp(18f))
-                canvas.drawText("$vol%", textX, safeY, paint)
-            }
-
-            // 10. מטריצת נוריות אולפן (LED Matrix 200% - 6 צבעים)
-            else -> {
-                val pad = dp(6f)
-                rect.set(pad, pad + topEditOffset, w - pad, h - pad)
-                paint.style = Paint.Style.FILL
-                paint.color = c4
-                canvas.drawRoundRect(rect, cornerPx, cornerPx, paint)
-
-                if (brdW > 0f) {
-                    paint.style = Paint.Style.STROKE
-                    paint.strokeWidth = brdW
-                    paint.color = c5
+                3 -> {
+                    paint.style = Paint.Style.FILL
+                    paint.color = c3
                     canvas.drawRoundRect(rect, cornerPx, cornerPx, paint)
+
+                    if (brdW > 0f) {
+                        paint.style = Paint.Style.STROKE
+                        paint.strokeWidth = brdW
+                        paint.color = c4
+                        canvas.drawRoundRect(rect, cornerPx, cornerPx, paint)
+                    }
+
+                    val lineY = rect.top + rect.height() * 0.65f
+                    val startX = dp(52f)
+                    val endX = w - dp(22f)
+                    val thumbX = startX + (endX - startX) * ratio
+
+                    VectorIconRenderer.drawStyledSpeakerIcon(
+                        canvas, dp(28f), lineY - dp(2f), icoSize, c5, 3, vol, paint
+                    )
+
+                    val lineThick = dp(2f + (cfg.extraParam2 / 100f) * 6f)
+                    paint.style = Paint.Style.STROKE
+                    paint.strokeWidth = lineThick
+                    paint.color = c2
+                    canvas.drawLine(startX, lineY, endX, lineY, paint)
+
+                    paint.color = c0
+                    canvas.drawLine(startX, lineY, thumbX, lineY, paint)
+
+                    val thumbRad = dp(5f + (cfg.extraParam1 / 100f) * 8f)
+                    paint.style = Paint.Style.FILL
+                    paint.color = c1
+                    canvas.drawCircle(thumbX, lineY, thumbRad, paint)
+
+                    paint.color = c5
+                    paint.textSize = txtPx
+                    paint.textAlign = Paint.Align.LEFT
+                    canvas.drawText("עוצמת שמע: $vol%", startX, rect.top + rect.height() * 0.36f, paint)
                 }
 
-                val rows = (10 + (cfg.extraParam1 / 100f) * 16).roundToInt().coerceIn(8, 26)
-                val cols = (1 + (cfg.extraParam2 / 100f) * 4).roundToInt().coerceIn(1, 5)
-                val topY = rect.top + dp(30f)
-                val botY = rect.bottom - dp(30f)
-                val cellH = (botY - topY) / rows
-                val cellW = (rect.width() - dp(18f)) / cols
-                val activeRows = (rows * ratio).roundToInt()
+                4 -> {
+                    paint.style = Paint.Style.FILL
+                    paint.color = c2
+                    canvas.drawRoundRect(rect, safePillRad, safePillRad, paint)
 
-                paint.style = Paint.Style.FILL
-                for (r in 0 until rows) {
-                    val fromBottom = rows - 1 - r
-                    val isLit = fromBottom < activeRows
-                    paint.color = when {
-                        !isLit -> c3
-                        fromBottom >= (rows * 0.75f).roundToInt() -> c2
-                        fromBottom >= (rows * 0.5f).roundToInt() -> c1
-                        else -> c0
+                    val innerGap = dp(5f + (cfg.extraParam2 / 100f) * 8f)
+                    val trackTop = rect.top + safeVerticalInset + dp(12f)
+                    val trackBot = rect.bottom - safeVerticalInset - dp(12f)
+                    val fillTop = trackBot - (trackBot - trackTop) * ratio
+
+                    innerRect.set(rect.left + innerGap, fillTop, rect.right - innerGap, trackBot)
+                    paint.style = Paint.Style.FILL
+                    paint.shader = LinearGradient(0f, fillTop, 0f, trackBot, c1, c0, Shader.TileMode.CLAMP)
+                    canvas.drawRoundRect(innerRect, safePillRad * 0.5f, safePillRad * 0.5f, paint)
+                    paint.shader = null
+
+                    if (brdW > 0f) {
+                        paint.style = Paint.Style.STROKE
+                        paint.strokeWidth = brdW
+                        paint.color = c3
+                        canvas.drawRoundRect(rect, safePillRad, safePillRad, paint)
                     }
-                    val cy = topY + r * cellH
-                    for (c in 0 until cols) {
-                        val cx = rect.left + dp(9f) + c * cellW
-                        innerRect.set(cx + 2f, cy + 2f, cx + cellW - 2f, cy + cellH - 2f)
-                        canvas.drawRoundRect(innerRect, dp(2f), dp(2f), paint)
+
+                    paint.style = Paint.Style.FILL
+                    paint.color = cfg.colors[4]
+                    paint.textSize = txtPx
+                    paint.textAlign = Paint.Align.CENTER
+                    canvas.drawText("$vol%", w / 2f, rect.top + safeVerticalInset, paint)
+
+                    VectorIconRenderer.drawStyledSpeakerIcon(
+                        canvas, w / 2f, rect.bottom - safeVerticalInset * 0.8f, icoSize, c5, 4, vol, paint
+                    )
+                }
+
+                5 -> {
+                    paint.style = Paint.Style.FILL
+                    paint.color = c3
+                    canvas.drawRoundRect(rect, safePillRad, safePillRad, paint)
+
+                    if (brdW > 0f) {
+                        paint.style = Paint.Style.STROKE
+                        paint.strokeWidth = brdW
+                        paint.color = c4
+                        canvas.drawRoundRect(rect, safePillRad, safePillRad, paint)
+                    }
+
+                    val cx = w / 2f
+                    val cy = rect.top + rect.height() * 0.45f
+                    val radScale = 0.24f + (cfg.extraParam2 / 100f) * 0.15f
+                    val r = min(w, rect.height()) * radScale
+                    innerRect.set(cx - r, cy - r, cx + r, cy + r)
+
+                    val ringStroke = dp(4f + (cfg.extraParam1 / 100f) * 8f)
+                    paint.style = Paint.Style.STROKE
+                    paint.strokeWidth = ringStroke
+                    paint.color = c2
+                    paint.strokeCap = Paint.Cap.ROUND
+                    canvas.drawArc(innerRect, 135f, 270f, false, paint)
+
+                    paint.color = if (vol > 150) c1 else c0
+                    canvas.drawArc(innerRect, 135f, 270f * ratio, false, paint)
+
+                    paint.style = Paint.Style.FILL
+                    paint.color = c5
+                    paint.textSize = txtPx
+                    paint.textAlign = Paint.Align.CENTER
+                    canvas.drawText("$vol%", cx, cy + dp(5f), paint)
+
+                    VectorIconRenderer.drawStyledSpeakerIcon(
+                        canvas, cx, rect.bottom - safeVerticalInset * 0.85f, icoSize, c5, 5, vol, paint
+                    )
+                }
+
+                6 -> {
+                    paint.style = Paint.Style.FILL
+                    paint.color = c3
+                    canvas.drawRoundRect(rect, safePillRad, safePillRad, paint)
+
+                    if (brdW > 0f) {
+                        paint.style = Paint.Style.STROKE
+                        paint.strokeWidth = brdW
+                        paint.color = c4
+                        canvas.drawRoundRect(rect, safePillRad, safePillRad, paint)
+                    }
+
+                    val bars = (8 + (cfg.extraParam1 / 100f) * 14).roundToInt().coerceIn(6, 24)
+                    val topSpace = rect.top + safeVerticalInset + dp(12f)
+                    val botSpace = rect.bottom - safeVerticalInset - dp(12f)
+                    val stepY = (botSpace - topSpace) / bars
+                    val activeBars = (bars * ratio).roundToInt()
+                    val thicknessRatio = (0.85f - (cfg.extraParam2 / 100f) * 0.45f).coerceIn(0.3f, 0.85f)
+
+                    paint.style = Paint.Style.FILL
+                    for (i in 0 until bars) {
+                        val idxFromBottom = bars - 1 - i
+                        val y = topSpace + i * stepY
+                        val waveFactor = 0.30f + 0.48f * abs(sin(i * 0.65f))
+                        val bw = rect.width() * waveFactor
+                        val left = (w - bw) / 2f
+
+                        paint.color = when {
+                            idxFromBottom >= activeBars -> c2
+                            idxFromBottom >= bars / 2 -> c1
+                            else -> c0
+                        }
+                        innerRect.set(left, y, left + bw, y + stepY * thicknessRatio)
+                        canvas.drawRoundRect(innerRect, dp(4f), dp(4f), paint)
+                    }
+
+                    paint.color = c5
+                    paint.textSize = txtPx
+                    paint.textAlign = Paint.Align.CENTER
+                    canvas.drawText("$vol%", w / 2f, rect.top + safeVerticalInset, paint)
+
+                    VectorIconRenderer.drawStyledSpeakerIcon(
+                        canvas, w / 2f, rect.bottom - safeVerticalInset * 0.8f, icoSize, c5, 6, vol, paint
+                    )
+                }
+
+                7 -> {
+                    val widthFactor = 0.48f + (cfg.extraParam1 / 100f) * 0.42f
+                    val pillW = w * widthFactor
+                    val left = (w - pillW) / 2f
+                    rect.set(left, dp(8f) + topEditOffset, left + pillW, h - dp(8f))
+                    val rad = min(cornerPx.coerceAtLeast(pillW / 2f), pillW / 2f)
+
+                    paint.style = Paint.Style.FILL
+                    paint.color = c1
+                    canvas.drawRoundRect(rect, rad, rad, paint)
+
+                    canvas.save()
+                    clipPath.reset()
+                    clipPath.addRoundRect(rect, rad, rad, Path.Direction.CW)
+                    canvas.clipPath(clipPath)
+
+                    val fillTop = rect.bottom - rect.height() * ratio
+                    innerRect.set(left, fillTop, left + pillW, rect.bottom)
+                    paint.color = c0
+                    canvas.drawRect(innerRect, paint)
+
+                    val inset = max(rad * 0.68f, dp(22f))
+                    paint.style = Paint.Style.FILL
+                    paint.color = cfg.colors[3]
+                    paint.textSize = txtPx
+                    paint.textAlign = Paint.Align.CENTER
+                    canvas.drawText("$vol%", w / 2f, rect.top + inset, paint)
+
+                    VectorIconRenderer.drawStyledSpeakerIcon(
+                        canvas, w / 2f, rect.bottom - inset * 0.85f, icoSize, cfg.colors[3], 7, vol, paint
+                    )
+                    canvas.restore()
+
+                    if (brdW > 0f) {
+                        paint.style = Paint.Style.STROKE
+                        paint.strokeWidth = brdW
+                        paint.color = c2
+                        canvas.drawRoundRect(rect, rad, rad, paint)
                     }
                 }
 
-                paint.color = c5
-                paint.textSize = txtPx
-                paint.textAlign = Paint.Align.CENTER
-                canvas.drawText("$vol%", w / 2f, rect.top + dp(21f), paint)
+                8 -> {
+                    paint.style = Paint.Style.FILL
+                    paint.color = c3
+                    canvas.drawRect(rect, paint)
 
-                VectorIconRenderer.drawStyledSpeakerIcon(
-                    canvas, w / 2f, rect.bottom - dp(15f), icoSize, c5, 10, vol, paint
-                )
+                    if (brdW > 0f) {
+                        paint.style = Paint.Style.STROKE
+                        paint.strokeWidth = brdW
+                        paint.color = c4
+                        canvas.drawRect(rect, paint)
+                    }
+
+                    val blocks = (6 + (cfg.extraParam1 / 100f) * 14).roundToInt().coerceIn(6, 20)
+                    val gapPx = dp(1f + (cfg.extraParam2 / 100f) * 5f)
+                    val startY = rect.top + dp(32f)
+                    val endY = rect.bottom - dp(32f)
+                    val blockH = (endY - startY) / blocks
+                    val lit = (blocks * ratio).roundToInt()
+
+                    paint.style = Paint.Style.FILL
+                    for (i in 0 until blocks) {
+                        val idxFromBottom = blocks - 1 - i
+                        paint.color = when {
+                            idxFromBottom >= lit -> c2
+                            idxFromBottom >= (blocks * 0.75f).roundToInt() -> c1
+                            else -> c0
+                        }
+                        val by = startY + i * blockH
+                        canvas.drawRect(rect.left + dp(8f), by + gapPx, rect.right - dp(8f), by + blockH - gapPx, paint)
+                    }
+
+                    paint.color = c5
+                    paint.textSize = txtPx
+                    paint.textAlign = Paint.Align.CENTER
+                    canvas.drawText("$vol%", w / 2f, rect.top + dp(21f), paint)
+
+                    VectorIconRenderer.drawStyledSpeakerIcon(
+                        canvas, w / 2f, rect.bottom - dp(16f), icoSize, c5, 8, vol, paint
+                    )
+                }
+
+                9 -> {
+                    val barW = dp(6f + (cfg.extraParam1 / 100f) * 18f)
+                    val isRight = cfg.posXPercent >= 50
+                    val xPos = if (isRight) w - barW - dp(4f) else dp(4f)
+                    rect.set(xPos, dp(10f) + topEditOffset, xPos + barW, h - dp(10f))
+                    val rad = min(cornerPx, barW / 2f)
+
+                    paint.style = Paint.Style.FILL
+                    paint.color = c1
+                    canvas.drawRoundRect(rect, rad, rad, paint)
+
+                    val fillTop = rect.bottom - rect.height() * ratio
+                    innerRect.set(xPos, fillTop, xPos + barW, rect.bottom)
+                    paint.color = c0
+                    canvas.drawRoundRect(innerRect, rad, rad, paint)
+
+                    paint.color = cfg.colors[2]
+                    paint.textSize = txtPx
+                    paint.textAlign = Paint.Align.CENTER
+                    val distPx = dp(16f + (cfg.extraParam2 / 100f) * 20f)
+                    val textX = if (isRight) xPos - distPx else xPos + barW + distPx
+                    val safeY = fillTop.coerceIn(rect.top + dp(18f), h - dp(18f))
+                    canvas.drawText("$vol%", textX, safeY, paint)
+                }
+
+                else -> {
+                    paint.style = Paint.Style.FILL
+                    paint.color = c4
+                    canvas.drawRoundRect(rect, safePillRad, safePillRad, paint)
+
+                    if (brdW > 0f) {
+                        paint.style = Paint.Style.STROKE
+                        paint.strokeWidth = brdW
+                        paint.color = c5
+                        canvas.drawRoundRect(rect, safePillRad, safePillRad, paint)
+                    }
+
+                    val rows = (10 + (cfg.extraParam1 / 100f) * 14).roundToInt().coerceIn(8, 24)
+                    val cols = (1 + (cfg.extraParam2 / 100f) * 4).roundToInt().coerceIn(1, 5)
+                    val topY = rect.top + safeVerticalInset + dp(10f)
+                    val botY = rect.bottom - safeVerticalInset - dp(12f)
+                    val cellH = (botY - topY) / rows
+                    val cellW = (rect.width() - dp(18f)) / cols
+                    val activeRows = (rows * ratio).roundToInt()
+
+                    paint.style = Paint.Style.FILL
+                    for (r in 0 until rows) {
+                        val fromBottom = rows - 1 - r
+                        val isLit = fromBottom < activeRows
+                        paint.color = when {
+                            !isLit -> c3
+                            fromBottom >= (rows * 0.75f).roundToInt() -> c2
+                            fromBottom >= (rows * 0.5f).roundToInt() -> c1
+                            else -> c0
+                        }
+                        val cy = topY + r * cellH
+                        for (c in 0 until cols) {
+                            val cx = rect.left + dp(9f) + c * cellW
+                            innerRect.set(cx + 2f, cy + 2f, cx + cellW - 2f, cy + cellH - 2f)
+                            canvas.drawRoundRect(innerRect, dp(2f), dp(2f), paint)
+                        }
+                    }
+
+                    paint.color = c5
+                    paint.textSize = txtPx
+                    paint.textAlign = Paint.Align.CENTER
+                    canvas.drawText("$vol%", w / 2f, rect.top + safeVerticalInset, paint)
+
+                    VectorIconRenderer.drawStyledSpeakerIcon(
+                        canvas, w / 2f, rect.bottom - safeVerticalInset * 0.8f, icoSize, c5, 10, vol, paint
+                    )
+                }
             }
         }
 
-        // במצב עריכת מיקום: מצייר כפתור "✓ סיים" בולט בראש המחוון כדי שלעולם לא ייתקע!
         if (isEditPositionMode) {
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = dp(2f)
@@ -1074,7 +1046,6 @@ class CustomThemedSliderOverlayView(
         if (isEditPositionMode) {
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    // לחיצה על כפתור "✓ סיים" הירוק סוגרת מיד את מצב העריכה ושומרת!
                     if (doneBtnRect.contains(event.x, event.y)) {
                         onFinishEditClicked()
                         return true
@@ -1096,7 +1067,10 @@ class CustomThemedSliderOverlayView(
         }
 
         if (event.action == MotionEvent.ACTION_DOWN || event.action == MotionEvent.ACTION_MOVE) {
-            val ratio = if (AudioEngine.sliderStyleIndex == 3) {
+            val isHorizontalStyle = (AudioEngine.sliderStyleIndex == 3 ||
+                                     AudioEngine.sliderStyleIndex == 16 ||
+                                     AudioEngine.sliderStyleIndex == 19)
+            val ratio = if (isHorizontalStyle) {
                 (event.x / width.toFloat()).coerceIn(0f, 1f)
             } else {
                 1f - (event.y / height.toFloat()).coerceIn(0f, 1f)
