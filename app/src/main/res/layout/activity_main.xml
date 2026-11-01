@@ -45,7 +45,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
-                    android:text="מנוע DSP HD פעיל ● מוגן מהתנגשויות שמע"
+                    android:text="מנוע AI Neural DSP פעיל ● צליל אולפני"
                     android:textColor="#00E676"
                     android:textSize="11sp"
                     android:textStyle="bold" />
@@ -97,7 +97,7 @@
                 android:layout_height="42dp"
                 android:layout_marginEnd="4dp"
                 android:backgroundTint="#00000000"
-                android:text="איכות HD ושירים"
+                android:text="איכות ו-AI"
                 android:textColor="#A0AAB8"
                 android:textSize="12sp"
                 android:textStyle="bold"
@@ -310,7 +310,6 @@
                                 app:strokeColor="#FF1744" />
                         </LinearLayout>
 
-                        <!-- הפרדת מצבים: הגברה עד 300% + מצב עיצוב מחוון בלבד ללא הגברה -->
                         <View
                             android:layout_width="match_parent"
                             android:layout_height="1dp"
@@ -421,7 +420,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="4dp"
-                            android:text="תומך בלחיצה רציפה על כפתורי הווליום, אינו מפריע לצילום מסך, ופועל גם במצב עיצוב מחוון בלבד או בהגברה עד 300%."
+                            android:text="תומך בלחיצה רציפה על כפתורי הווליום, אינו מפריע לצילום מסך, וכולל כפתורי רמקול/רטט/השתק פעילים על המחוון."
                             android:textColor="#D0D8E8"
                             android:textSize="12sp" />
 
@@ -439,7 +438,7 @@
                 </com.google.android.material.card.MaterialCardView>
             </LinearLayout>
 
-            <!-- ================= קטגוריה 2: שיפור איכות הצליל + מנוע שיפור שירים לאיכות הגבוהה ביותר ================= -->
+            <!-- ================= קטגוריה 2: מנוע AI מוכן לשיפור שירים + שיפור איכות הצליל ================= -->
             <LinearLayout
                 android:id="@+id/sectionQuality"
                 android:layout_width="match_parent"
@@ -447,7 +446,168 @@
                 android:orientation="vertical"
                 android:visibility="gone">
 
-                <!-- כרטיס 1: מנוע HD DSP המקורי -->
+                <!-- כרטיס AI ראשון ובולט: מנוע AI מוכן לשיפור שירים לאיכות גבוהה במיוחד -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    app:cardBackgroundColor="#171E30"
+                    app:cardCornerRadius="24dp"
+                    app:strokeColor="#00E676"
+                    app:strokeWidth="1.5dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="20dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="מנוע AI לשיפור שירים (AI Neural Mastering)"
+                                    android:textColor="#00E676"
+                                    android:textSize="16sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:id="@+id/tvAiEngineSubStatus"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="פעיל ● מתאים אוטומטית תדרים, באס, שירה ורוחב במה לכל שיר בזמן אמת"
+                                    android:textColor="#D0D8E8"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+
+                            <androidx.appcompat.widget.SwitchCompat
+                                android:id="@+id/switchAiSongEngine"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:checked="true"
+                                android:scaleX="1.15"
+                                android:scaleY="1.15"
+                                app:thumbTint="#00E676" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="14dp"
+                            android:layout_marginBottom="8dp"
+                            android:text="בחר פרופיל מאסטרינג אוטונומי של ה-AI:"
+                            android:textColor="#FFFFFF"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnAiModeAuto"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="0dp"
+                                android:layout_height="44dp"
+                                android:layout_marginEnd="4dp"
+                                android:layout_weight="1"
+                                android:text="AI אוטומטי"
+                                android:textColor="#00E676"
+                                android:textSize="10sp"
+                                app:cornerRadius="10dp"
+                                app:strokeColor="#00E676" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnAiModeBass"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="0dp"
+                                android:layout_height="44dp"
+                                android:layout_marginEnd="4dp"
+                                android:layout_weight="1"
+                                android:text="AI באס עמוק"
+                                android:textColor="#A0AAB8"
+                                android:textSize="10sp"
+                                app:cornerRadius="10dp"
+                                app:strokeColor="#3A465E" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnAiModeVocal"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="0dp"
+                                android:layout_height="44dp"
+                                android:layout_marginEnd="4dp"
+                                android:layout_weight="1"
+                                android:text="AI שירה קריסטל"
+                                android:textColor="#A0AAB8"
+                                android:textSize="10sp"
+                                app:cornerRadius="10dp"
+                                app:strokeColor="#3A465E" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnAiModeConcert"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="0dp"
+                                android:layout_height="44dp"
+                                android:layout_weight="1"
+                                android:text="AI הופעה 3D"
+                                android:textColor="#A0AAB8"
+                                android:textSize="10sp"
+                                app:cornerRadius="10dp"
+                                app:strokeColor="#3A465E" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="עוצמת עיבוד נוירלי (AI Neural Intensity)"
+                                android:textColor="#FFFFFF"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvAiIntensityValue"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="85%"
+                                android:textColor="#00E676"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <SeekBar
+                            android:id="@+id/seekAiIntensity"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:max="100"
+                            android:progress="85"
+                            android:progressTint="#00E676"
+                            android:thumbTint="#00E676" />
+
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- כרטיס 2: מנוע HD DSP המקורי -->
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -627,7 +787,7 @@
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
-                <!-- כרטיס 2 חדש: מנוע מאסטרינג ושיפור שירים לאיכות הגבוהה ביותר (Ultra Hi-Fi Song Remaster) -->
+                <!-- כרטיס 3: שליטה ידנית במאסטרינג שירים (Ultra Hi-Fi 32-Bit) -->
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -658,7 +818,7 @@
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="מנוע שיפור שירים לאיכות שיא (Ultra Hi-Fi 32-Bit)"
+                                    android:text="כיוון ידני למנוע שיפור שירים (Ultra Hi-Fi 32-Bit)"
                                     android:textColor="#FFD740"
                                     android:textSize="15sp"
                                     android:textStyle="bold" />
@@ -680,7 +840,6 @@
                                 app:thumbTint="#FFD740" />
                         </LinearLayout>
 
-                        <!-- 1. שחזור תדרים דחוסים -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -716,7 +875,6 @@
                             android:progressTint="#FFD740"
                             android:thumbTint="#FFD740" />
 
-                        <!-- 2. הפרדת כלים ובמה אקוסטית -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -752,7 +910,6 @@
                             android:progressTint="#00E5FF"
                             android:thumbTint="#00E5FF" />
 
-                        <!-- 3. דינמיקת באס ופאנץ' אולפני -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -1034,7 +1191,7 @@
                 </com.google.android.material.card.MaterialCardView>
             </LinearLayout>
 
-            <!-- ================= קטגוריה 5: עיצוב מחוון עוצמת הקול (15 סגנונות מותאמים) ================= -->
+            <!-- ================= קטגוריה 5: עיצוב מחוון עוצמת הקול (18 סגנונות מותאמים) ================= -->
             <LinearLayout
                 android:id="@+id/sectionSliderDesign"
                 android:layout_width="match_parent"
@@ -1073,7 +1230,7 @@
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="סגנון מחוון (15 עיצובים מותאמים אישית)"
+                                    android:text="סגנון מחוון (18 עיצובים מותאמים אישית)"
                                     android:textColor="#FFFFFF"
                                     android:textSize="15sp"
                                     android:textStyle="bold" />
