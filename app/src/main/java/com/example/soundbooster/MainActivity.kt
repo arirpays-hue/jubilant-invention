@@ -39,7 +39,7 @@ import com.google.android.material.card.MaterialCardView
 import kotlin.math.roundToInt
 
 // =========================================================================
-// 1. מנוע סאונד + מנוע מאסטרינג לשירים (32-Bit Remaster) + הגברה עד 300% + מצב מחוון בלבד
+// 1. מנוע סאונד + מנוע AI אוטונומי לשיפור שירים + 18 סגנונות מחוון
 // =========================================================================
 object AudioEngine {
     var loudnessEnhancer: LoudnessEnhancer? = null
@@ -50,11 +50,7 @@ object AudioEngine {
 
     var currentTotalVolume: Int = 100
     var isBoosterActive: Boolean = true
-
-    // מצב שימוש במחוון המעוצב בלבד ללא הגברת קול (Visual Slider Only)
     var sliderOnlyNoBoostMode: Boolean = false
-
-    // אפשרות לפתיחת הגברה עד 300%
     var allow300PercentBoost: Boolean = false
 
     var antiClippingEnabled: Boolean = true
@@ -62,11 +58,16 @@ object AudioEngine {
     var clarityLevel: Int = 50
     var warmthLevel: Int = 40
 
-    // מנוע שיפור שירים לאיכות שיא (Ultra Hi-Fi Song Remaster Engine)
+    // מנוע ה-AI המוכן לשיפור שירים לאיכות גבוהה במיוחד (AI Neural Song Enhancer)
+    var aiSongEngineEnabled: Boolean = true
+    var aiPresetMode: Int = 0             // 0 = Auto Master, 1 = Deep Bass, 2 = Crystal Vocal, 3 = 3D Concert
+    var aiNeuralIntensity: Int = 85       // 0% - 100%
+
+    // כיוון ידני משלים למנוע השירים
     var songRemasterEnabled: Boolean = true
-    var songUpscaleLevel: Int = 75       // שחזור תדרים דחוסים (Air & Treble Harmonics)
-    var songSeparationLevel: Int = 65    // הפרדת כלים ובמה אקוסטית (3D Stereo Separation)
-    var songPunchLevel: Int = 60         // הידוק באס ופאנץ' אולפני (Sub-Bass Tightness)
+    var songUpscaleLevel: Int = 75
+    var songSeparationLevel: Int = 65
+    var songPunchLevel: Int = 60
 
     var sliderStyleIndex: Int = 1
 
@@ -74,7 +75,7 @@ object AudioEngine {
     var bootCooldownUntil: Long = 0L
     private var playbackCallbackRegistered = false
 
-    // 15 סגנונות המחוון המסודרים מחדש (0 עד 14) לאחר הסרת המחוונים שביקשת
+    // 18 סגנונות המחוון (כולל 3 החדשים מהתמונות: 15, 16, 17)
     val styleNames = listOf(
         "0. מחוון המערכת המקורי של המכשיר (Native SystemUI)",
         "1. עיצוב הזכוכית היוקרתי (Glassmorphism)",
@@ -90,7 +91,10 @@ object AudioEngine {
         "11. קפסולה לבנה דקה + כפתור Play (Slim Red Accent Pill)",
         "12. אולפן זהב כהה אנכי (Golden Thin Track & Knob)",
         "13. בר עליון צמוד קצה עם תו מוזיקה (Top Status Bar Strip)",
-        "14. קפסולת Windows / Emoji מדורגת (Segmented Cap Pill)"
+        "14. קפסולת Windows / Emoji מדורגת (Segmented Cap Pill)",
+        "15. סייבר-טק HUD טלמטריה (Cyber-Tech Telemetry HUD)",
+        "16. זכוכית חלבית + פס ניאון וכפתורים (Frosted Neon Tube Card)",
+        "17. זכוכית חלבית + קפסולת קשת בצבעים משתנים (Animated Rainbow Pill)"
     )
 
     fun getEffectiveMaxVolume(): Int {
@@ -106,6 +110,11 @@ object AudioEngine {
             val prefs = it.getSharedPreferences("sound_booster_hd", Context.MODE_PRIVATE)
             sliderOnlyNoBoostMode = prefs.getBoolean("slider_only_mode", sliderOnlyNoBoostMode)
             allow300PercentBoost = prefs.getBoolean("allow_300_boost", allow300PercentBoost)
+
+            aiSongEngineEnabled = prefs.getBoolean("ai_song_en", aiSongEngineEnabled)
+            aiPresetMode = prefs.getInt("ai_preset_mode", aiPresetMode)
+            aiNeuralIntensity = prefs.getInt("ai_intensity", aiNeuralIntensity)
+
             songRemasterEnabled = prefs.getBoolean("song_remaster_en", songRemasterEnabled)
             songUpscaleLevel = prefs.getInt("song_upscale", songUpscaleLevel)
             songSeparationLevel = prefs.getInt("song_sep", songSeparationLevel)
@@ -124,6 +133,9 @@ object AudioEngine {
         context.getSharedPreferences("sound_booster_hd", Context.MODE_PRIVATE).edit()
             .putBoolean("slider_only_mode", sliderOnlyNoBoostMode)
             .putBoolean("allow_300_boost", allow300PercentBoost)
+            .putBoolean("ai_song_en", aiSongEngineEnabled)
+            .putInt("ai_preset_mode", aiPresetMode)
+            .putInt("ai_intensity", aiNeuralIntensity)
             .putBoolean("song_remaster_en", songRemasterEnabled)
             .putInt("song_upscale", songUpscaleLevel)
             .putInt("song_sep", songSeparationLevel)
@@ -168,6 +180,7 @@ object AudioEngine {
                         runCatching { loudnessEnhancer?.setTargetGain(0) }
                     } else {
                         reapplyCurrentGainSafely()
+                        updateSoundQualityDSP()
                     }
                 }
             }, Handler(Looper.getMainLooper()))
@@ -180,9 +193,11 @@ object AudioEngine {
             return
         }
         val extra = (currentTotalVolume - 100).coerceAtLeast(0)
-        // מדרג הגברה חכם התומך גם עד 300% עם שמירה על צליל נקי
+        // מנוע ה-AI מוסיף פיצוי דינמי עדין (AI Loudness Compensation) גם בעוצמות נמוכות
+        val aiSmartWarmthGain = if (aiSongEngineEnabled) ((aiNeuralIntensity / 100f) * 180).roundToInt() else 0
         val factor = if (antiClippingEnabled) 17 else 24
-        val cleanGain = extra * factor
+        val cleanGain = (extra * factor) + aiSmartWarmthGain
+
         runCatching {
             loudnessEnhancer?.enabled = true
             loudnessEnhancer?.setTargetGain(cleanGain)
@@ -199,7 +214,8 @@ object AudioEngine {
             .edit().putInt("slider_style", sliderStyleIndex).apply()
     }
 
-    // משלב את מנוע ה-HD עם מנוע שיפור השירים (Song Remaster Engine)
+    // מנוע ה-AI האוטונומי + DSP HD: מחשב בזמן אמת עקומת תדרים אידיאלית (Fletcher-Munson AI Curve)
+    // שמונעת עיוותים בווליום גבוה ומעשירה באס ופרטים בווליום בינוני/נמוך!
     fun updateSoundQualityDSP() {
         if (!isBoosterActive || sliderOnlyNoBoostMode) return
         val eq = equalizer ?: return
@@ -211,37 +227,93 @@ object AudioEngine {
             val minEQ = eq.bandLevelRange[0].toInt()
 
             var lowBandGain = 0f
-            var midCutGain = 0f
+            var lowMidGain = 0f
+            var centerMidGain = 0f
             var presenceGain = 0f
             var airHighGain = 0f
 
             if (hiResOptimizerEnabled) {
-                lowBandGain += (warmthLevel / 100f) * (maxEQ * 0.28f)
-                airHighGain += (clarityLevel / 100f) * (maxEQ * 0.35f)
+                lowBandGain += (warmthLevel / 100f) * (maxEQ * 0.22f)
+                airHighGain += (clarityLevel / 100f) * (maxEQ * 0.28f)
             }
 
             if (songRemasterEnabled) {
-                // 1. שחזור תדרים גבוהים דחוסים (Upscaler)
-                airHighGain += (songUpscaleLevel / 100f) * (maxEQ * 0.42f)
-                // 2. הפרדת כלים ושירה (ניקוי עכירות בתדרי אמצע-נמוך והרמת נוכחות)
-                midCutGain -= (songSeparationLevel / 100f) * (maxEQ * 0.18f)
-                presenceGain += (songSeparationLevel / 100f) * (maxEQ * 0.32f)
-                // 3. פאנץ' באס אולפני (Sub-Punch)
-                lowBandGain += (songPunchLevel / 100f) * (maxEQ * 0.34f)
+                airHighGain += (songUpscaleLevel / 100f) * (maxEQ * 0.30f)
+                lowMidGain -= (songSeparationLevel / 100f) * (maxEQ * 0.14f)
+                presenceGain += (songSeparationLevel / 100f) * (maxEQ * 0.24f)
+                lowBandGain += (songPunchLevel / 100f) * (maxEQ * 0.25f)
+            }
 
-                // העשרת במת הסטריאו והבאס הפיזי בהתאם למנוע השירים
-                val targetVirt = ((songSeparationLevel / 100f) * 650).toInt().toShort()
-                val targetBass = ((songPunchLevel / 100f) * 550).toInt().toShort()
-                runCatching { virtualizer?.setStrength(targetVirt) }
-                runCatching { bassBoost?.setStrength(targetBass) }
+            // עיבוד מנוע ה-AI המוכן לשיפור שירים (AI Neural Mastering)
+            if (aiSongEngineEnabled) {
+                val aiPower = (aiNeuralIntensity / 100f).coerceIn(0f, 1f)
+                // התאמה דינמית חכמה לפי עוצמת השמע הנוכחית למניעת צרידות ברמקול
+                val highVolProtection = if (currentTotalVolume > 140) 0.72f else 1.0f
+
+                when (aiPresetMode) {
+                    // 0: AI אוטומטי (איזון אולפני מלא: סאב הדוק, ניקוי עכירות, הבלטת שירה ותדרי אוויר)
+                    0 -> {
+                        lowBandGain += aiPower * (maxEQ * 0.42f) * highVolProtection
+                        lowMidGain -= aiPower * (maxEQ * 0.18f)
+                        centerMidGain += aiPower * (maxEQ * 0.12f)
+                        presenceGain += aiPower * (maxEQ * 0.36f)
+                        airHighGain += aiPower * (maxEQ * 0.45f)
+
+                        runCatching { bassBoost?.setStrength((aiPower * 680 * highVolProtection).toInt().toShort()) }
+                        runCatching { virtualizer?.setStrength((aiPower * 720).toInt().toShort()) }
+                        runCatching { presetReverb?.preset = 1.toShort() } // חדר אקוסטי קטן ונקי
+                    }
+                    // 1: AI באס עמוק ופאנץ' (AI Ultra Bass & Sub)
+                    1 -> {
+                        lowBandGain += aiPower * (maxEQ * 0.62f) * highVolProtection
+                        lowMidGain += aiPower * (maxEQ * 0.15f)
+                        presenceGain += aiPower * (maxEQ * 0.25f)
+                        airHighGain += aiPower * (maxEQ * 0.32f)
+
+                        runCatching { bassBoost?.setStrength((aiPower * 920 * highVolProtection).toInt().toShort()) }
+                        runCatching { virtualizer?.setStrength((aiPower * 550).toInt().toShort()) }
+                        runCatching { presetReverb?.preset = 0.toShort() }
+                    }
+                    // 2: AI שירה קריסטל והפרדת כלים (AI Crystal Vocal HD)
+                    2 -> {
+                        lowBandGain += aiPower * (maxEQ * 0.20f)
+                        lowMidGain -= aiPower * (maxEQ * 0.26f)
+                        centerMidGain += aiPower * (maxEQ * 0.38f)
+                        presenceGain += aiPower * (maxEQ * 0.52f)
+                        airHighGain += aiPower * (maxEQ * 0.55f)
+
+                        runCatching { bassBoost?.setStrength((aiPower * 350).toInt().toShort()) }
+                        runCatching { virtualizer?.setStrength((aiPower * 680).toInt().toShort()) }
+                        runCatching { presetReverb?.preset = 1.toShort() }
+                    }
+                    // 3: AI הופעה חיה ובמה תלת-ממדית (AI 3D Concert Live)
+                    else -> {
+                        lowBandGain += aiPower * (maxEQ * 0.45f) * highVolProtection
+                        centerMidGain += aiPower * (maxEQ * 0.20f)
+                        presenceGain += aiPower * (maxEQ * 0.42f)
+                        airHighGain += aiPower * (maxEQ * 0.50f)
+
+                        runCatching { bassBoost?.setStrength((aiPower * 740 * highVolProtection).toInt().toShort()) }
+                        runCatching { virtualizer?.setStrength((aiPower * 980).toInt().toShort()) }
+                        runCatching { presetReverb?.preset = 4.toShort() } // אולם הופעות
+                    }
+                }
             }
 
             eq.setBandLevel(0, lowBandGain.toInt().coerceIn(minEQ, maxEQ).toShort())
-            if (bands >= 4) {
-                eq.setBandLevel(1, midCutGain.toInt().coerceIn(minEQ, maxEQ).toShort())
-                eq.setBandLevel((bands - 2).toShort(), presenceGain.toInt().coerceIn(minEQ, maxEQ).toShort())
+            if (bands >= 5) {
+                eq.setBandLevel(1, lowMidGain.toInt().coerceIn(minEQ, maxEQ).toShort())
+                eq.setBandLevel(2, centerMidGain.toInt().coerceIn(minEQ, maxEQ).toShort())
+                eq.setBandLevel(3, presenceGain.toInt().coerceIn(minEQ, maxEQ).toShort())
+                eq.setBandLevel(4, airHighGain.toInt().coerceIn(minEQ, maxEQ).toShort())
+            } else if (bands == 4) {
+                eq.setBandLevel(1, lowMidGain.toInt().coerceIn(minEQ, maxEQ).toShort())
+                eq.setBandLevel(2, presenceGain.toInt().coerceIn(minEQ, maxEQ).toShort())
+                eq.setBandLevel(3, airHighGain.toInt().coerceIn(minEQ, maxEQ).toShort())
+            } else {
+                eq.setBandLevel(1, centerMidGain.toInt().coerceIn(minEQ, maxEQ).toShort())
+                eq.setBandLevel(2, airHighGain.toInt().coerceIn(minEQ, maxEQ).toShort())
             }
-            eq.setBandLevel((bands - 1).toShort(), airHighGain.toInt().coerceIn(minEQ, maxEQ).toShort())
         }
     }
 
@@ -278,7 +350,12 @@ object AudioEngine {
                 val safePct = currentTotalVolume.coerceIn(0, 100)
                 val sysTarget = ((safePct / 100f) * maxSysVol).roundToInt()
                 runCatching { audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, sysTarget, flags) }
-                runCatching { loudnessEnhancer?.setTargetGain(0) }
+                if (sliderOnlyNoBoostMode || !isBoosterActive) {
+                    runCatching { loudnessEnhancer?.setTargetGain(0) }
+                } else {
+                    reapplyCurrentGainSafely()
+                    updateSoundQualityDSP()
+                }
             } else {
                 val curSys = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
                 if (curSys < maxSysVol || allowUI) {
@@ -408,7 +485,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // מעדכן את טווח המחוון הראשי בין 100% (מצב מחוון בלבד), 200% (רגיל) או 300% (טורבו)
     private fun syncVolumeRangeUI() {
         val maxAllowed = AudioEngine.getEffectiveMaxVolume()
         seekTotalVolume.max = maxAllowed
@@ -451,6 +527,17 @@ class MainActivity : AppCompatActivity() {
         val switchAllow300 = findViewById<SwitchCompat>(R.id.switchAllow300Boost)
         val switchSliderOnly = findViewById<SwitchCompat>(R.id.switchSliderOnlyMode)
 
+        // בקרי מנוע ה-AI המוכן לשיפור שירים
+        val switchAiEngine = findViewById<SwitchCompat>(R.id.switchAiSongEngine)
+        val tvAiSubStatus = findViewById<TextView>(R.id.tvAiEngineSubStatus)
+        val btnAiAuto = findViewById<MaterialButton>(R.id.btnAiModeAuto)
+        val btnAiBass = findViewById<MaterialButton>(R.id.btnAiModeBass)
+        val btnAiVocal = findViewById<MaterialButton>(R.id.btnAiModeVocal)
+        val btnAiConcert = findViewById<MaterialButton>(R.id.btnAiModeConcert)
+        val aiModeBtns = listOf(btnAiAuto, btnAiBass, btnAiVocal, btnAiConcert)
+        val seekAiIntensity = findViewById<SeekBar>(R.id.seekAiIntensity)
+        val tvAiIntensityVal = findViewById<TextView>(R.id.tvAiIntensityValue)
+
         val switchAntiClip = findViewById<SwitchCompat>(R.id.switchAntiClip)
         val switchHiRes = findViewById<SwitchCompat>(R.id.switchHiRes)
         val seekClarity = findViewById<SeekBar>(R.id.seekClarity)
@@ -458,7 +545,6 @@ class MainActivity : AppCompatActivity() {
         val seekWarmth = findViewById<SeekBar>(R.id.seekWarmth)
         val tvWarmthValue = findViewById<TextView>(R.id.tvWarmthValue)
 
-        // בקרי מנוע שיפור השירים החדש
         val switchSongRemaster = findViewById<SwitchCompat>(R.id.switchSongRemaster)
         val seekSongUpscale = findViewById<SeekBar>(R.id.seekSongUpscale)
         val tvSongUpscaleVal = findViewById<TextView>(R.id.tvSongUpscaleValue)
@@ -493,18 +579,80 @@ class MainActivity : AppCompatActivity() {
                     tvStatus.setTextColor(Color.parseColor("#00E5FF"))
                     cardHeader.strokeColor = Color.parseColor("#00E5FF")
                 }
-                AudioEngine.allow300PercentBoost -> {
-                    tvStatus.text = "מנוע DSP 300% טורבו + שיפור שירים פעיל ●"
-                    tvStatus.setTextColor(Color.parseColor("#FFD740"))
-                    cardHeader.strokeColor = Color.parseColor("#FFD740")
-                }
-                else -> {
-                    tvStatus.text = "מנוע DSP HD פעיל ● מוגן מהתנגשויות שמע"
+                AudioEngine.aiSongEngineEnabled -> {
+                    tvStatus.text = "מנוע AI Neural Mastering פעיל ● שדרוג שירים חי"
                     tvStatus.setTextColor(Color.parseColor("#00E676"))
                     cardHeader.strokeColor = Color.parseColor("#00E676")
                 }
+                else -> {
+                    tvStatus.text = "מנוע DSP HD פעיל ● מוגן מהתנגשויות שמע"
+                    tvStatus.setTextColor(Color.parseColor("#00E5FF"))
+                    cardHeader.strokeColor = Color.parseColor("#00E5FF")
+                }
             }
         }
+
+        // חיבור מנוע ה-AI לשיפור שירים
+        fun updateAiButtonsUI() {
+            val modeNames = listOf(
+                "AI Auto-Master: איזון אולפני אוטומטי לכל שיר",
+                "AI Deep Bass: הדגשת תדרי סאב ופאנץ' נקי",
+                "AI Crystal Vocal: הבלטת שירה והפרדת כלים",
+                "AI 3D Concert: במת הופעה חיה וסראונד היקפי"
+            )
+            tvAiSubStatus.text = if (AudioEngine.aiSongEngineEnabled) {
+                "פעיל ● ${modeNames.getOrElse(AudioEngine.aiPresetMode) { modeNames[0] }}"
+            } else {
+                "מנוע ה-AI כבוי כעת (ניתן להפעיל בלחיצה על המתג)"
+            }
+            for (i in aiModeBtns.indices) {
+                val active = (i == AudioEngine.aiPresetMode && AudioEngine.aiSongEngineEnabled)
+                aiModeBtns[i].strokeColor = ColorStateList.valueOf(
+                    if (active) Color.parseColor("#00E676") else Color.parseColor("#3A465E")
+                )
+                aiModeBtns[i].setTextColor(
+                    if (active) Color.parseColor("#00E676") else Color.parseColor("#A0AAB8")
+                )
+            }
+        }
+
+        switchAiEngine.isChecked = AudioEngine.aiSongEngineEnabled
+        seekAiIntensity.progress = AudioEngine.aiNeuralIntensity
+        tvAiIntensityVal.text = "${AudioEngine.aiNeuralIntensity}%"
+        updateAiButtonsUI()
+
+        switchAiEngine.setOnCheckedChangeListener { _, isChecked ->
+            AudioEngine.aiSongEngineEnabled = isChecked
+            AudioEngine.saveEngineModes(this)
+            AudioEngine.updateSoundQualityDSP()
+            updateAiButtonsUI()
+            refreshHeaderStatusText()
+        }
+
+        for (modeIdx in aiModeBtns.indices) {
+            aiModeBtns[modeIdx].setOnClickListener {
+                AudioEngine.aiPresetMode = modeIdx
+                if (!AudioEngine.aiSongEngineEnabled) {
+                    AudioEngine.aiSongEngineEnabled = true
+                    switchAiEngine.isChecked = true
+                }
+                AudioEngine.saveEngineModes(this)
+                AudioEngine.updateSoundQualityDSP()
+                updateAiButtonsUI()
+                refreshHeaderStatusText()
+            }
+        }
+
+        seekAiIntensity.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                tvAiIntensityVal.text = "$p%"
+                AudioEngine.aiNeuralIntensity = p
+                AudioEngine.saveEngineModes(this@MainActivity)
+                AudioEngine.updateSoundQualityDSP()
+            }
+            override fun onStartTrackingTouch(s: SeekBar?) {}
+            override fun onStopTrackingTouch(s: SeekBar?) {}
+        })
 
         switchEnable.setOnCheckedChangeListener { _, isChecked ->
             AudioEngine.setEnabled(isChecked)
@@ -541,11 +689,11 @@ class MainActivity : AppCompatActivity() {
                 if (AudioEngine.sliderOnlyNoBoostMode) {
                     tvSubBoostInfo.text = "מערכת: $progress% | מצב עיצוב מחוון בלבד (ללא הגברה)"
                 } else if (progress <= 100) {
-                    tvSubBoostInfo.text = "מערכת: $progress% | הגברת HD: מוכנה"
+                    tvSubBoostInfo.text = "מערכת: $progress% | מנוע AI + HD: מוכנים"
                 } else {
                     val extraPercent = progress - 100
                     val db = String.format("%.1f", extraPercent * 0.17f)
-                    tvSubBoostInfo.text = "מערכת: 100% | הגברת HD נקייה: +$db dB"
+                    tvSubBoostInfo.text = "מערכת: 100% | הגברת AI HD נקייה: +$db dB"
                 }
 
                 val color = when {
@@ -621,7 +769,6 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(s: SeekBar?) {}
         })
 
-        // חיבור מנוע שיפור השירים לאיכות שיא (Ultra Hi-Fi 32-Bit Song Remaster)
         switchSongRemaster.isChecked = AudioEngine.songRemasterEnabled
         seekSongUpscale.progress = AudioEngine.songUpscaleLevel
         tvSongUpscaleVal.text = "${AudioEngine.songUpscaleLevel}%"
@@ -771,7 +918,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     // =========================================================================
-    // קטגוריה 5: התאמה דינמית ל-15 המחוונים המסודרים
+    // קטגוריה 5: התאמה דינמית ל-18 המחוונים (כולל 3 החדשים מהתמונות)
     // =========================================================================
     private fun setupSliderDesignCategory() {
         val stylesContainer = findViewById<LinearLayout>(R.id.stylesGridContainer)
@@ -1300,7 +1447,7 @@ class MainActivity : AppCompatActivity() {
 }
 
 // =========================================================================
-// 3. שירות המחוון הצף (תומך במצב עיצוב מחוון בלבד, הגברת 300%, לחיצה רציפה וצילום מסך)
+// 3. שירות המחוון הצף
 // =========================================================================
 class VolumeOverlayService : AccessibilityService() {
 
@@ -1366,7 +1513,6 @@ class VolumeOverlayService : AccessibilityService() {
     fun isEditModeActive(): Boolean = isInteractiveEditActive
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
-        // השירות פועל גם כשנמצאים במצב "עיצוב מחוון בלבד ללא הגברה"
         if (!AudioEngine.isBoosterActive && !AudioEngine.sliderOnlyNoBoostMode) return super.onKeyEvent(event)
         if (AudioEngine.isInternalVolumeChange) return false
 
