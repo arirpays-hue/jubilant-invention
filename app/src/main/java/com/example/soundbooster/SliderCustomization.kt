@@ -6,10 +6,11 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ComposeShader
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.RadialGradient
+import android.graphics.PorterDuff
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.SweepGradient
@@ -303,40 +304,49 @@ object SliderThemeManager {
 }
 
 // =========================================================================
-// 2. גלגל צבעים מקצועי (16.7 מיליון צבעים - Full sRGB HSV Spectrum + Quick Swatches)
-//    קל ופשוט לשימוש: כולל שחור מוחלט (0%), לבן נקי (100%), וכל גוון ורוויה בעולם!
+// 2. גלגל צבעים מקצועי (Studio HSV Ring + 2D Saturation/Value Box + Quick Swatches)
+//    מכיל את כל 16,777,216 הצבעים בעולם:
+//    - טבעת חיצונית: בוחרת גוון (Hue 0°..360°)
+//    - ריבוע פנימי: משמאל לימין = רוויה (לבן -> צבע חי), מלמעלה למטה = בהירות (מואר -> שחור מוחלט)
+//    - שורה תחתונה: 12 צבעים מהירים בנגיעה אחת
 // =========================================================================
 class TrueColorWheelView(context: Context) : View(context) {
-    private val wheelPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val centerOverlayPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val darknessOverlayPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val swatchPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
-    private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 4f
+    }
+    private val svBoxPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+    }
+    private val frameBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 3f
         color = Color.parseColor("#3A465E")
     }
-    private val selectorOuterPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val pointerOuterPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 6f
+        strokeWidth = 5.5f
         color = Color.WHITE
     }
-    private val selectorInnerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val pointerInnerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 2.5f
         color = Color.BLACK
     }
-    private val previewFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val pointerFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
     }
+    private val swatchPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
-    // 3 רכיבי הצבע הישירים שמייצגים כל צבע בעולם (Hue: 0..360, Sat: 0..1, Val: 0..1)
+    private val svBoxRect = RectF()
+
     private var currentHueDeg = 190f
     private var currentSatRatio = 0.85f
     private var currentValRatio = 1.0f
 
-    // 10 צבעים מהירים בלחיצה אחת בתחתית הקנבס (לבן, שחור, ציאן, ירוק, צהוב, כתום, אדום, מג'נטה, סגול, כחול)
+    // מצב גרירה פעיל כך שהאצבע לעולם לא "בורחת" מהטבעת או מהריבוע הפנימי בזמן תנועה!
+    private var activeTouchZone = 0 // 0 = None, 1 = Hue Ring, 2 = SV Box, 3 = Swatches
+
     private val quickSwatches = intArrayOf(
         Color.parseColor("#FFFFFF"),
         Color.parseColor("#000000"),
@@ -347,13 +357,20 @@ class TrueColorWheelView(context: Context) : View(context) {
         Color.parseColor("#FF1744"),
         Color.parseColor("#FF007F"),
         Color.parseColor("#AA00FF"),
-        Color.parseColor("#2979FF")
+        Color.parseColor("#2979FF"),
+        Color.parseColor("#B5DDD1"),
+        Color.parseColor("#94A3B8")
     )
     private val swatchCentersX = FloatArray(quickSwatches.size)
     private var swatchCenterY = 0f
     private var swatchRadius = 0f
 
     var onWheelColorChanged: ((Int) -> Unit)? = null
+
+    init {
+        // נדרש עבור ComposeShader של ריבוע הרוויה/בהירות
+        setLayerType(LAYER_TYPE_SOFTWARE, null)
+    }
 
     fun setColorFromExternal(color: Int) {
         val hsv = FloatArray(3)
@@ -396,55 +413,66 @@ class TrueColorWheelView(context: Context) : View(context) {
         val h = height.toFloat()
         if (w <= 0f || h <= 0f) return
 
-        // חלוקת הקנבס: גלגל צבעים גדול בחלק העליון + שורת צבעים מהירים בתחתית
-        val swatchBarHeight = h * 0.18f
-        val wheelAreaH = h - swatchBarHeight
+        val swatchAreaH = h * 0.17f
+        val wheelAreaH = h - swatchAreaH
         val cx = w / 2f
         val cy = wheelAreaH / 2f
-        val radius = min(cx, cy) * 0.88f
-        if (radius <= 0f) return
 
-        // 1. ציור ספקטרום 360 מעלות מלא
+        val outerRadius = min(cx, cy) * 0.90f
+        val ringThickness = outerRadius * 0.22f
+        val ringMidRadius = outerRadius - ringThickness / 2f
+        val innerRadius = outerRadius - ringThickness - 6f
+        if (innerRadius <= 10f) return
+
+        // 1. ציור טבעת ה-Hue החיצונית (360 מעלות של כל צבעי הקשת)
         val hueColors = IntArray(13) { i ->
-            val hue = (i * 30f) % 360f
-            Color.HSVToColor(floatArrayOf(hue, 1f, 1f))
+            Color.HSVToColor(floatArrayOf((i * 30f) % 360f, 1f, 1f))
         }
-        wheelPaint.shader = SweepGradient(cx, cy, hueColors, null)
-        canvas.drawCircle(cx, cy, radius, wheelPaint)
+        ringPaint.strokeWidth = ringThickness
+        ringPaint.shader = SweepGradient(cx, cy, hueColors, null)
+        canvas.drawCircle(cx, cy, ringMidRadius, ringPaint)
 
-        // 2. מעבר רדיאלי מלבן במרכז (רוויה 0%) לצבע מלא בהיקף (רוויה 100%)
-        centerOverlayPaint.shader = RadialGradient(
-            cx, cy, radius,
-            Color.WHITE, Color.TRANSPARENT, Shader.TileMode.CLAMP
+        // סמן הבחירה על טבעת ה-Hue
+        val hueRad = Math.toRadians(currentHueDeg.toDouble())
+        val hx = (cx + cos(hueRad) * ringMidRadius).toFloat()
+        val hy = (cy + sin(hueRad) * ringMidRadius).toFloat()
+        val pureHueColor = Color.HSVToColor(floatArrayOf(currentHueDeg, 1f, 1f))
+        pointerFillPaint.color = pureHueColor
+        val ringThumbR = (ringThickness * 0.48f).coerceAtLeast(12f)
+        canvas.drawCircle(hx, hy, ringThumbR, pointerFillPaint)
+        canvas.drawCircle(hx, hy, ringThumbR, pointerOuterPaint)
+        canvas.drawCircle(hx, hy, ringThumbR + 2f, pointerInnerPaint)
+
+        // 2. ציור ריבוע ה-Saturation & Brightness הפנימי (מאפשר לבחור כל צבע מלבן ועד שחור מוחלט!)
+        val halfSide = innerRadius * 0.68f
+        svBoxRect.set(cx - halfSide, cy - halfSide, cx + halfSide, cy + halfSide)
+
+        val satShader = LinearGradient(
+            svBoxRect.left, svBoxRect.top, svBoxRect.right, svBoxRect.top,
+            Color.WHITE, pureHueColor, Shader.TileMode.CLAMP
         )
-        canvas.drawCircle(cx, cy, radius, centerOverlayPaint)
+        val valShader = LinearGradient(
+            svBoxRect.left, svBoxRect.top, svBoxRect.left, svBoxRect.bottom,
+            Color.TRANSPARENT, Color.BLACK, Shader.TileMode.CLAMP
+        )
+        svBoxPaint.shader = ComposeShader(satShader, valShader, PorterDuff.Mode.MULTIPLY)
+        canvas.drawRoundRect(svBoxRect, 12f, 12f, svBoxPaint)
+        canvas.drawRoundRect(svBoxRect, 12f, 12f, frameBorderPaint)
 
-        // 3. שכבת בהירות (Brightness / Value) המאפשרת להגיע עד שחור מוחלט (0%)
-        val darkAlpha = ((1f - currentValRatio) * 255f).roundToInt().coerceIn(0, 255)
-        if (darkAlpha > 0) {
-            darknessOverlayPaint.color = Color.argb(darkAlpha, 0, 0, 0)
-            canvas.drawCircle(cx, cy, radius, darknessOverlayPaint)
-        }
-
-        canvas.drawCircle(cx, cy, radius, borderPaint)
-
-        // 4. ציור סמן הבחירה בנקודה המדויקת של הגוון והרוויה הנוכחיים
-        val angleRad = Math.toRadians(currentHueDeg.toDouble())
-        val dist = currentSatRatio * radius
-        val sx = (cx + cos(angleRad) * dist).toFloat()
-        val sy = (cy + sin(angleRad) * dist).toFloat()
-
+        // סמן הבחירה בתוך ריבוע ה-SV
+        val svX = svBoxRect.left + currentSatRatio * svBoxRect.width()
+        val svY = svBoxRect.top + (1f - currentValRatio) * svBoxRect.height()
         val selectedColor = computeCurrentSelectedColor()
-        previewFillPaint.color = selectedColor
-        canvas.drawCircle(sx, sy, 22f, previewFillPaint)
-        canvas.drawCircle(sx, sy, 22f, selectorOuterPaint)
-        canvas.drawCircle(sx, sy, 24.5f, selectorInnerPaint)
+        pointerFillPaint.color = selectedColor
+        canvas.drawCircle(svX, svY, 16f, pointerFillPaint)
+        canvas.drawCircle(svX, svY, 16f, pointerOuterPaint)
+        canvas.drawCircle(svX, svY, 18f, pointerInnerPaint)
 
-        // 5. ציור שורת 10 צבעים מהירים בתחתית לבחירה בנגיעה אחת
+        // 3. שורת 12 צבעים מהירים בתחתית
         val count = quickSwatches.size
         val stepX = w / count
-        swatchRadius = min(stepX * 0.36f, swatchBarHeight * 0.38f)
-        swatchCenterY = wheelAreaH + swatchBarHeight * 0.52f
+        swatchRadius = min(stepX * 0.38f, swatchAreaH * 0.38f)
+        swatchCenterY = wheelAreaH + swatchAreaH * 0.54f
 
         for (i in 0 until count) {
             val scx = stepX * (i + 0.5f)
@@ -454,7 +482,7 @@ class TrueColorWheelView(context: Context) : View(context) {
             canvas.drawCircle(scx, swatchCenterY, swatchRadius, swatchPaint)
 
             swatchPaint.style = Paint.Style.STROKE
-            swatchPaint.strokeWidth = 2.5f
+            swatchPaint.strokeWidth = 2.2f
             swatchPaint.color = Color.parseColor("#4E5D78")
             canvas.drawCircle(scx, swatchCenterY, swatchRadius, swatchPaint)
         }
@@ -466,45 +494,79 @@ class TrueColorWheelView(context: Context) : View(context) {
         val h = height.toFloat()
         if (w <= 0f || h <= 0f) return super.onTouchEvent(event)
 
-        val swatchBarHeight = h * 0.18f
-        val wheelAreaH = h - swatchBarHeight
+        val swatchAreaH = h * 0.17f
+        val wheelAreaH = h - swatchAreaH
+        val cx = w / 2f
+        val cy = wheelAreaH / 2f
 
-        if (event.action == MotionEvent.ACTION_DOWN && event.y >= wheelAreaH - 6f) {
-            // בדיקה אם המשתמש לחץ על אחד מעיגולי הצבע המהירים בתחתית
-            for (i in quickSwatches.indices) {
-                if (hypot((event.x - swatchCentersX[i]).toDouble(), (event.y - swatchCenterY).toDouble()) <= swatchRadius * 1.35f) {
-                    setColorFromExternal(quickSwatches[i])
-                    onWheelColorChanged?.invoke(computeCurrentSelectedColor())
-                    parent?.requestDisallowInterceptTouchEvent(true)
+        val outerRadius = min(cx, cy) * 0.90f
+        val ringThickness = outerRadius * 0.22f
+        val innerRadius = outerRadius - ringThickness - 6f
+
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                parent?.requestDisallowInterceptTouchEvent(true)
+
+                // בדיקה אם נלחץ צבע מהיר בשורה התחתונה
+                if (event.y >= wheelAreaH - 4f) {
+                    activeTouchZone = 3
+                    for (i in quickSwatches.indices) {
+                        if (hypot((event.x - swatchCentersX[i]).toDouble(), (event.y - swatchCenterY).toDouble()) <= swatchRadius * 1.4f) {
+                            setColorFromExternal(quickSwatches[i])
+                            onWheelColorChanged?.invoke(computeCurrentSelectedColor())
+                            return true
+                        }
+                    }
                     return true
                 }
-            }
-        }
 
-        if (event.action == MotionEvent.ACTION_DOWN || event.action == MotionEvent.ACTION_MOVE) {
-            val cx = w / 2f
-            val cy = wheelAreaH / 2f
-            val radius = min(cx, cy) * 0.88f
-            val dx = event.x - cx
-            val dy = event.y - cy
-            val dist = hypot(dx.toDouble(), dy.toDouble()).toFloat()
+                val dx = event.x - cx
+                val dy = event.y - cy
+                val dist = hypot(dx.toDouble(), dy.toDouble()).toFloat()
 
-            currentSatRatio = (dist / radius).coerceIn(0f, 1f)
-            var angle = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
-            if (angle < 0f) angle += 360f
-            currentHueDeg = angle.coerceIn(0f, 360f)
-
-            // אם הבהירות הייתה על 0% (שחור מוחלט) והמשתמש נוגע בגלגל, מעלים אוטומטית בהירות כדי שיראה את הצבע שבחר
-            if (currentValRatio < 0.08f) {
-                currentValRatio = 1.0f
+                // בדיקה אם הלחיצה התחילה בריבוע ה-SV הפנימי או בטבעת ה-Hue החיצונית
+                if (svBoxRect.contains(event.x, event.y) || dist < innerRadius * 0.85f) {
+                    activeTouchZone = 2
+                    updateSVFromTouch(event.x, event.y)
+                } else {
+                    activeTouchZone = 1
+                    updateHueFromTouch(dx, dy)
+                }
+                return true
             }
 
-            invalidate()
-            onWheelColorChanged?.invoke(computeCurrentSelectedColor())
-            parent?.requestDisallowInterceptTouchEvent(true)
-            return true
+            MotionEvent.ACTION_MOVE -> {
+                parent?.requestDisallowInterceptTouchEvent(true)
+                when (activeTouchZone) {
+                    1 -> updateHueFromTouch(event.x - cx, event.y - cy)
+                    2 -> updateSVFromTouch(event.x, event.y)
+                }
+                return true
+            }
+
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                activeTouchZone = 0
+                parent?.requestDisallowInterceptTouchEvent(false)
+                return true
+            }
         }
         return super.onTouchEvent(event)
+    }
+
+    private fun updateHueFromTouch(dx: Float, dy: Float) {
+        var angle = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
+        if (angle < 0f) angle += 360f
+        currentHueDeg = angle.coerceIn(0f, 360f)
+        invalidate()
+        onWheelColorChanged?.invoke(computeCurrentSelectedColor())
+    }
+
+    private fun updateSVFromTouch(tx: Float, ty: Float) {
+        if (svBoxRect.width() <= 0f || svBoxRect.height() <= 0f) return
+        currentSatRatio = ((tx - svBoxRect.left) / svBoxRect.width()).coerceIn(0f, 1f)
+        currentValRatio = (1f - ((ty - svBoxRect.top) / svBoxRect.height())).coerceIn(0f, 1f)
+        invalidate()
+        onWheelColorChanged?.invoke(computeCurrentSelectedColor())
     }
 }
 
@@ -1024,7 +1086,6 @@ class CustomThemedSliderOverlayView(
         val h = height.toFloat()
         if (w <= 0f || h <= 0f) return
 
-        // בדיקת סטטוס בלוטות' בלבד ללא שום שינוי או דריסה של הווליום!
         AudioEngine.updateBluetoothStatusOnly(context)
 
         val cfg = SliderThemeManager.getCurrentConfig()
