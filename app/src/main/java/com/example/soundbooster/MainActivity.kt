@@ -3,6 +3,7 @@ package com.example.soundbooster
 import android.accessibilityservice.AccessibilityService
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
@@ -43,7 +44,7 @@ import com.google.android.material.card.MaterialCardView
 import kotlin.math.roundToInt
 
 // =========================================================================
-// 1. מנוע סאונד + מנוע AI לשיפור שירים + חסימת לופ מחוון המערכת + זיהוי בלוטות'
+// 1. מנוע סאונד יציב (ללא קפיצות ווליום עצמאיות וללא הופעת מחוון מערכת!)
 // =========================================================================
 object AudioEngine {
     var loudnessEnhancer: LoudnessEnhancer? = null
@@ -81,11 +82,11 @@ object AudioEngine {
 
     var sliderStyleIndex: Int = 1
 
-    // חותמות זמן למניעת קפיצת מחוון המערכת ולופים בזמן שינוי עוצמה או החלפת מחוון
     @Volatile var isInternalVolumeChange: Boolean = false
     @Volatile var suppressSystemUILoopUntil: Long = 0L
     var bootCooldownUntil: Long = 0L
     private var playbackCallbackRegistered = false
+    private var isInitializedOnce = false
 
     val styleNames = listOf(
         "0. מחוון המערכת המקורי של המכשיר (Native SystemUI)",
@@ -147,9 +148,9 @@ object AudioEngine {
         }
     }
 
-    fun refreshBluetoothAndStreamState(context: Context) {
+    // מעדכן *אך ורק* את חיווי סמל הבלוטות' מבלי לגעת או לשנות את הווליום לעולם!
+    fun updateBluetoothStatusOnly(context: Context) {
         val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
-
         var btFound = false
         runCatching {
             val devices = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
@@ -169,6 +170,12 @@ object AudioEngine {
             }
         }
         isBluetoothConnected = btFound
+    }
+
+    // בודק אם נכנסה שיחה או צלצול (ורק אם הערוץ באמת השתנה, קורא את הווליום של אותו ערוץ)
+    fun refreshBluetoothAndStreamState(context: Context) {
+        updateBluetoothStatusOnly(context)
+        val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
 
         val now = SystemClock.elapsedRealtime()
         if (now > manualStreamOverrideUntil) {
@@ -178,8 +185,16 @@ object AudioEngine {
                 else -> 0
             }
             if (autoStream != activeStreamType) {
+                if (activeStreamType == 0) {
+                    savedMediaBoostVolume = currentTotalVolume
+                }
                 activeStreamType = autoStream
-                syncCurrentVolumeFromActiveStream(am)
+                if (activeStreamType == 0) {
+                    // חזרה ממצב שיחה למדיה: משחזרים בדיוק את הווליום שהמשתמש קבע ולא דורסים אותו!
+                    currentTotalVolume = savedMediaBoostVolume.coerceIn(0, getEffectiveMaxVolume())
+                } else {
+                    syncCurrentVolumeFromActiveStream(am)
+                }
             }
         }
     }
@@ -190,26 +205,19 @@ object AudioEngine {
             savedMediaBoostVolume = currentTotalVolume
         }
         activeStreamType = (activeStreamType + 1) % 5
-        manualStreamOverrideUntil = SystemClock.elapsedRealtime() + 8000L
-        syncCurrentVolumeFromActiveStream(am)
+        manualStreamOverrideUntil = SystemClock.elapsedRealtime() + 12000L
+        if (activeStreamType == 0) {
+            currentTotalVolume = savedMediaBoostVolume.coerceIn(0, getEffectiveMaxVolume())
+        } else {
+            syncCurrentVolumeFromActiveStream(am)
+        }
     }
 
-    fun syncCurrentVolumeFromActiveStream(am: AudioManager) {
-        if (activeStreamType == 0) {
-            val maxSys = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
-            val curSys = am.getStreamVolume(AudioManager.STREAM_MUSIC)
-            val sysPct = ((curSys.toFloat() / maxSys) * 100f).roundToInt()
-            currentTotalVolume = if (savedMediaBoostVolume > 100 && curSys >= maxSys && !sliderOnlyNoBoostMode) {
-                savedMediaBoostVolume.coerceAtMost(getEffectiveMaxVolume())
-            } else {
-                sysPct
-            }
-        } else {
-            val streamConst = getAndroidStreamConstant(activeStreamType)
-            val maxSys = am.getStreamMaxVolume(streamConst).coerceAtLeast(1)
-            val curSys = am.getStreamVolume(streamConst)
-            currentTotalVolume = ((curSys.toFloat() / maxSys) * 100f).roundToInt().coerceIn(0, 100)
-        }
+    private fun syncCurrentVolumeFromActiveStream(am: AudioManager) {
+        val streamConst = getAndroidStreamConstant(activeStreamType)
+        val maxSys = am.getStreamMaxVolume(streamConst).coerceAtLeast(1)
+        val curSys = am.getStreamVolume(streamConst)
+        currentTotalVolume = ((curSys.toFloat() / maxSys) * 100f).roundToInt().coerceIn(0, 100)
     }
 
     fun init(context: Context? = null) {
@@ -227,11 +235,24 @@ object AudioEngine {
             songSeparationLevel = prefs.getInt("song_sep", songSeparationLevel)
             songPunchLevel = prefs.getInt("song_punch", songPunchLevel)
 
-            currentTotalVolume = prefs.getInt("saved_vol", currentTotalVolume).coerceIn(0, getEffectiveMaxVolume())
-            savedMediaBoostVolume = currentTotalVolume
+            if (!isInitializedOnce) {
+                if (prefs.contains("saved_vol")) {
+                    currentTotalVolume = prefs.getInt("saved_vol", 100).coerceIn(0, getEffectiveMaxVolume())
+                } else {
+                    val am = it.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                    if (am != null) {
+                        val maxS = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+                        val curS = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+                        currentTotalVolume = ((curS.toFloat() / maxS) * 100f).roundToInt().coerceIn(0, 100)
+                    }
+                }
+                savedMediaBoostVolume = currentTotalVolume
+                isInitializedOnce = true
+            }
+
             sliderStyleIndex = prefs.getInt("slider_style", sliderStyleIndex).coerceIn(0, styleNames.lastIndex)
             SliderThemeManager.loadAllStyleConfigs(it)
-            refreshBluetoothAndStreamState(it)
+            updateBluetoothStatusOnly(it)
             registerAssistantSafeRecovery(it.applicationContext)
         }
         ensureAudioEffectsCreated()
@@ -280,7 +301,7 @@ object AudioEngine {
             am.registerAudioPlaybackCallback(object : AudioManager.AudioPlaybackCallback() {
                 override fun onPlaybackConfigChanged(configs: MutableList<AudioPlaybackConfiguration>?) {
                     super.onPlaybackConfigChanged(configs)
-                    refreshBluetoothAndStreamState(appContext)
+                    updateBluetoothStatusOnly(appContext)
                     if (!isBoosterActive || sliderOnlyNoBoostMode) {
                         runCatching { loudnessEnhancer?.setTargetGain(0) }
                         return
@@ -290,23 +311,26 @@ object AudioEngine {
                         runCatching { loudnessEnhancer?.setTargetGain(0) }
                     } else {
                         reapplyCurrentGainSafely()
-                        updateSoundQualityDSP()
                     }
                 }
             }, Handler(Looper.getMainLooper()))
         }
     }
 
+    // מחשב הגברת DSP אך ורק מעל 100% - כך שבווליום 0%-100% העוצמה נשארת יציבה ומדויקת לחלוטין!
     private fun reapplyCurrentGainSafely() {
         if (!isBoosterActive || sliderOnlyNoBoostMode) {
             runCatching { loudnessEnhancer?.setTargetGain(0) }
             return
         }
         val mediaVol = if (activeStreamType == 0) currentTotalVolume else savedMediaBoostVolume
+        if (mediaVol <= 100) {
+            runCatching { loudnessEnhancer?.setTargetGain(0) }
+            return
+        }
         val extra = (mediaVol - 100).coerceAtLeast(0)
-        val aiSmartWarmthGain = if (aiSongEngineEnabled) ((aiNeuralIntensity / 100f) * 180).roundToInt() else 0
         val factor = if (antiClippingEnabled) 17 else 24
-        val cleanGain = (extra * factor) + aiSmartWarmthGain
+        val cleanGain = extra * factor
 
         runCatching {
             loudnessEnhancer?.enabled = true
@@ -320,7 +344,7 @@ object AudioEngine {
     }
 
     fun saveSelectedStyleIndex(context: Context) {
-        suppressSystemUILoopUntil = SystemClock.elapsedRealtime() + 800L
+        suppressSystemUILoopUntil = SystemClock.elapsedRealtime() + 1000L
         context.getSharedPreferences("sound_booster_hd", Context.MODE_PRIVATE)
             .edit().putInt("slider_style", sliderStyleIndex).apply()
     }
@@ -433,29 +457,32 @@ object AudioEngine {
         runCatching { presetReverb?.enabled = effectsShouldRun }
     }
 
-    // חוסם הרמטית כל קפיצה של מחוון המערכת כשנבחר סגנון מותאם אישית (1..17) ומונע לופ!
+    // חוק ברזל: כשמוגדר מחוון מותאם (sliderStyleIndex != 0), flags הוא תמיד 0 מוחלט!
+    // מחוון המערכת של הטלפון לעולם לא יכול להופיע כשמוגדר מחוון אחר.
     fun applyVolume(context: Context, totalPercent: Int, showNativeSystemUI: Boolean = false) {
         ensureAudioEffectsCreated()
         val maxAllowed = getEffectiveMaxVolume()
         currentTotalVolume = totalPercent.coerceIn(0, maxAllowed)
 
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
-
-        // מחוון המערכת המקורי מורשה לקפוץ *אך ורק* אם המשתמש בחר בסגנון 0 (מחוון המערכת המקורי)
         val now = SystemClock.elapsedRealtime()
-        val isCustomOverlaySelected = (sliderStyleIndex != 0 && VolumeOverlayService.instance != null)
-        val allowUI = showNativeSystemUI && !isCustomOverlaySelected && (now > bootCooldownUntil) && (now > suppressSystemUILoopUntil)
-        val flags = if (allowUI) AudioManager.FLAG_SHOW_UI else 0
+
+        // מחוון המערכת מורשה להופיע אך ורק אם נבחר סגנון 0!
+        val allowNativeUI = (sliderStyleIndex == 0) &&
+                            showNativeSystemUI &&
+                            (now > bootCooldownUntil) &&
+                            (now > suppressSystemUILoopUntil)
+        val flags = if (allowNativeUI) AudioManager.FLAG_SHOW_UI else 0
 
         isInternalVolumeChange = true
-        suppressSystemUILoopUntil = now + 350L
+        suppressSystemUILoopUntil = now + 450L
         try {
             if (activeStreamType != 0) {
                 val targetStream = getAndroidStreamConstant(activeStreamType)
                 val maxStreamVol = audioManager.getStreamMaxVolume(targetStream).coerceAtLeast(1)
                 val sysTarget = ((currentTotalVolume.coerceIn(0, 100) / 100f) * maxStreamVol).roundToInt()
                 val curStreamVol = audioManager.getStreamVolume(targetStream)
-                if (curStreamVol != sysTarget || allowUI) {
+                if (curStreamVol != sysTarget || allowNativeUI) {
                     runCatching { audioManager.setStreamVolume(targetStream, sysTarget, flags) }
                 }
                 return
@@ -471,26 +498,20 @@ object AudioEngine {
             if (currentTotalVolume <= 100 || sliderOnlyNoBoostMode || !isBoosterActive) {
                 val safePct = currentTotalVolume.coerceIn(0, 100)
                 val sysTarget = ((safePct / 100f) * maxSysVol).roundToInt()
-                if (curSys != sysTarget || allowUI) {
+                if (curSys != sysTarget || allowNativeUI) {
                     runCatching { audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, sysTarget, flags) }
                 }
-                if (sliderOnlyNoBoostMode || !isBoosterActive) {
-                    runCatching { loudnessEnhancer?.setTargetGain(0) }
-                } else {
-                    reapplyCurrentGainSafely()
-                    updateSoundQualityDSP()
-                }
+                runCatching { loudnessEnhancer?.setTargetGain(0) }
             } else {
-                if (curSys < maxSysVol || allowUI) {
+                if (curSys < maxSysVol || allowNativeUI) {
                     runCatching { audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, maxSysVol, flags) }
                 }
                 reapplyCurrentGainSafely()
-                updateSoundQualityDSP()
             }
         } finally {
             Handler(Looper.getMainLooper()).postDelayed({
                 isInternalVolumeChange = false
-            }, 120)
+            }, 140)
         }
     }
 }
@@ -531,11 +552,6 @@ class MainActivity : AppCompatActivity() {
 
         AudioEngine.init(this)
 
-        val curSys = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-        if (AudioEngine.currentTotalVolume <= 100 && AudioEngine.activeStreamType == 0) {
-            AudioEngine.currentTotalVolume = ((curSys.toFloat() / maxSystemVolume) * 100).roundToInt()
-        }
-
         setupCategoryTabs()
         setupModernUI()
         setupSliderDesignCategory()
@@ -543,11 +559,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        AudioEngine.refreshBluetoothAndStreamState(this)
+        AudioEngine.updateBluetoothStatusOnly(this)
         updateServiceButtonState()
         updateEditButtonState(VolumeOverlayService.instance?.isEditModeActive() == true)
         syncVolumeRangeUI()
-        seekTotalVolume.progress = AudioEngine.currentTotalVolume
     }
 
     private fun setupCategoryTabs() {
@@ -610,6 +625,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun syncVolumeRangeUI() {
+        isUpdatingControlsProgrammatically = true
         val maxAllowed = AudioEngine.getEffectiveMaxVolume()
         seekTotalVolume.max = maxAllowed
         progressTotalVolume.max = maxAllowed
@@ -634,6 +650,7 @@ class MainActivity : AppCompatActivity() {
         }
         seekTotalVolume.progress = AudioEngine.currentTotalVolume
         progressTotalVolume.progress = AudioEngine.currentTotalVolume
+        isUpdatingControlsProgrammatically = false
         updateServiceButtonState()
     }
 
@@ -777,6 +794,7 @@ class MainActivity : AppCompatActivity() {
 
         seekAiIntensity.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                if (!fromUser) return
                 tvAiIntensityVal.text = "$p%"
                 AudioEngine.aiNeuralIntensity = p
                 AudioEngine.saveEngineModes(this@MainActivity)
@@ -814,7 +832,7 @@ class MainActivity : AppCompatActivity() {
                 tvTotalVolume.text = "$progress%"
                 progressTotalVolume.progress = progress
 
-                if (fromUser) {
+                if (fromUser && !isUpdatingControlsProgrammatically) {
                     AudioEngine.applyVolume(this@MainActivity, progress, showNativeSystemUI = false)
                 }
 
@@ -893,6 +911,7 @@ class MainActivity : AppCompatActivity() {
         }
         seekClarity.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                if (!fromUser) return
                 tvClarityValue.text = "$p%"
                 AudioEngine.clarityLevel = p
                 AudioEngine.updateSoundQualityDSP()
@@ -902,6 +921,7 @@ class MainActivity : AppCompatActivity() {
         })
         seekWarmth.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                if (!fromUser) return
                 tvWarmthValue.text = "$p%"
                 AudioEngine.warmthLevel = p
                 AudioEngine.updateSoundQualityDSP()
@@ -925,6 +945,7 @@ class MainActivity : AppCompatActivity() {
         }
         seekSongUpscale.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                if (!fromUser) return
                 tvSongUpscaleVal.text = "$p%"
                 AudioEngine.songUpscaleLevel = p
                 AudioEngine.saveEngineModes(this@MainActivity)
@@ -935,6 +956,7 @@ class MainActivity : AppCompatActivity() {
         })
         seekSongSep.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                if (!fromUser) return
                 tvSongSepVal.text = "$p%"
                 AudioEngine.songSeparationLevel = p
                 AudioEngine.saveEngineModes(this@MainActivity)
@@ -945,6 +967,7 @@ class MainActivity : AppCompatActivity() {
         })
         seekSongPunch.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                if (!fromUser) return
                 tvSongPunchVal.text = "$p%"
                 AudioEngine.songPunchLevel = p
                 AudioEngine.saveEngineModes(this@MainActivity)
@@ -957,7 +980,9 @@ class MainActivity : AppCompatActivity() {
         seekBass.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 tvBassValue.text = "${progress / 10}%"
-                runCatching { AudioEngine.bassBoost?.setStrength(progress.toShort()) }
+                if (fromUser) {
+                    runCatching { AudioEngine.bassBoost?.setStrength(progress.toShort()) }
+                }
             }
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
@@ -966,7 +991,9 @@ class MainActivity : AppCompatActivity() {
         seekVirtualizer.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 tvVirtualizerValue.text = "${progress / 10}%"
-                runCatching { AudioEngine.virtualizer?.setStrength(progress.toShort()) }
+                if (fromUser) {
+                    runCatching { AudioEngine.virtualizer?.setStrength(progress.toShort()) }
+                }
             }
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
@@ -976,7 +1003,9 @@ class MainActivity : AppCompatActivity() {
         seekReverb.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 tvReverbValue.text = reverbNames.getOrElse(progress) { "ללא" }
-                runCatching { AudioEngine.presetReverb?.preset = progress.toShort() }
+                if (fromUser) {
+                    runCatching { AudioEngine.presetReverb?.preset = progress.toShort() }
+                }
             }
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
@@ -1005,8 +1034,10 @@ class MainActivity : AppCompatActivity() {
                         layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                     }
 
+                    val curLevel = eq.getBandLevel(band).toInt()
+                    val initDb = curLevel / 100
                     val tvDb = TextView(this).apply {
-                        text = "0 dB"
+                        text = if (initDb > 0) "+$initDb dB" else "$initDb dB"
                         setTextColor(Color.parseColor("#00E5FF"))
                         textSize = 13f
                         gravity = Gravity.END
@@ -1017,7 +1048,6 @@ class MainActivity : AppCompatActivity() {
 
                     val seekBar = SeekBar(this).apply {
                         max = (maxEQ - minEQ).coerceAtLeast(1)
-                        val curLevel = eq.getBandLevel(band).toInt()
                         progress = (curLevel - minEQ).coerceAtLeast(0)
                         progressTintList = ColorStateList.valueOf(Color.parseColor("#00E5FF"))
                         thumbTintList = ColorStateList.valueOf(Color.parseColor("#00E5FF"))
@@ -1025,9 +1055,11 @@ class MainActivity : AppCompatActivity() {
                         setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                             override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
                                 val newLevel = (p + minEQ).toShort()
-                                runCatching { eq.setBandLevel(band, newLevel) }
                                 val dbVal = newLevel.toInt() / 100
                                 tvDb.text = if (dbVal > 0) "+$dbVal dB" else "$dbVal dB"
+                                if (fromUser) {
+                                    runCatching { eq.setBandLevel(band, newLevel) }
+                                }
                             }
                             override fun onStartTrackingTouch(s: SeekBar?) {}
                             override fun onStopTrackingTouch(s: SeekBar?) {}
@@ -1059,7 +1091,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     // =========================================================================
-    // קטגוריה 5: התאמה דינמית ל-18 המחוונים + מתג סגירה בנגיעה מחוץ למחוון
+    // קטגוריה 5: התאמה דינמית ל-18 המחוונים + גלגל צבעים מלא (16.7M Colors)
     // =========================================================================
     private fun setupSliderDesignCategory() {
         val stylesContainer = findViewById<LinearLayout>(R.id.stylesGridContainer)
@@ -1125,6 +1157,15 @@ class MainActivity : AppCompatActivity() {
         colorWheelView = TrueColorWheelView(this)
         wheelHolder.addView(colorWheelView)
 
+        fun updateHexPreviewLabel(color: Int, slotName: String) {
+            val hex = String.format("#%06X", 0xFFFFFF and color)
+            tvHexColor.text = "$slotName: $hex"
+            // שומר על קריאות הטקסט גם כשבוחרים צבע שחור כהה מאוד
+            val hsv = FloatArray(3)
+            Color.colorToHSV(color, hsv)
+            tvHexColor.setTextColor(if (hsv[2] < 0.25f) Color.WHITE else color)
+        }
+
         fun loadSlotColorIntoWheel(slotIdx: Int) {
             isUpdatingControlsProgrammatically = true
             val cfg = SliderThemeManager.getCurrentConfig()
@@ -1148,9 +1189,7 @@ class MainActivity : AppCompatActivity() {
             seekSat.progress = colorWheelView.getSatSliderValue()
             seekVal.progress = colorWheelView.getValSliderValue()
 
-            val hex = String.format("#%06X", 0xFFFFFF and color)
-            tvHexColor.text = "${caps.colorSlotNames[safeSlot]}: $hex"
-            tvHexColor.setTextColor(color)
+            updateHexPreviewLabel(color, caps.colorSlotNames[safeSlot])
             isUpdatingControlsProgrammatically = false
         }
 
@@ -1265,7 +1304,6 @@ class MainActivity : AppCompatActivity() {
                 ).apply { bottomMargin = 8 }
 
                 setOnClickListener {
-                    // החלפת מחוון חלקה ללא הפעלת מחוון המערכת באמצע (מונע תקיעות ולופים!)
                     AudioEngine.sliderStyleIndex = i
                     AudioEngine.saveSelectedStyleIndex(this@MainActivity)
                     syncUIFromCurrentStyleConfig()
@@ -1298,9 +1336,7 @@ class MainActivity : AppCompatActivity() {
             cfg.colors[slot] = newColor
 
             val label = caps.colorSlotNames.getOrElse(slot) { "צבע" }
-            val hex = String.format("#%06X", 0xFFFFFF and newColor)
-            tvHexColor.text = "$label: $hex"
-            tvHexColor.setTextColor(newColor)
+            updateHexPreviewLabel(newColor, label)
 
             SliderThemeManager.saveStyleConfig(this)
             VolumeOverlayService.instance?.refreshOverlayLive(updateLayout = false)
@@ -1560,19 +1596,23 @@ class MainActivity : AppCompatActivity() {
         return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dpVal, resources.displayMetrics).roundToInt()
     }
 
+    // גם כאשר השירות טרם הופעל והמשתמש לוחץ על כפתורי הווליום בתוך האפליקציה,
+    // מחוון המערכת לא יקפוץ אם נבחר מחוון מותאם אישית (sliderStyleIndex != 0)!
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (VolumeOverlayService.instance == null) {
-            AudioEngine.refreshBluetoothAndStreamState(this)
             val maxAllowed = AudioEngine.getEffectiveMaxVolume()
+            val showSysUI = (AudioEngine.sliderStyleIndex == 0)
             when (keyCode) {
                 KeyEvent.KEYCODE_VOLUME_UP -> {
-                    seekTotalVolume.progress = (seekTotalVolume.progress + 8).coerceAtMost(maxAllowed)
-                    AudioEngine.applyVolume(this, seekTotalVolume.progress, showNativeSystemUI = true)
+                    val next = (AudioEngine.currentTotalVolume + 6).coerceAtMost(maxAllowed)
+                    seekTotalVolume.progress = next
+                    AudioEngine.applyVolume(this, next, showNativeSystemUI = showSysUI)
                     return true
                 }
                 KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                    seekTotalVolume.progress = (seekTotalVolume.progress - 8).coerceAtLeast(0)
-                    AudioEngine.applyVolume(this, seekTotalVolume.progress, showNativeSystemUI = true)
+                    val next = (AudioEngine.currentTotalVolume - 6).coerceAtLeast(0)
+                    seekTotalVolume.progress = next
+                    AudioEngine.applyVolume(this, next, showNativeSystemUI = showSysUI)
                     return true
                 }
             }
@@ -1590,18 +1630,26 @@ class MainActivity : AppCompatActivity() {
 
             for (i in 0 until minOf(eqSliders.size, offsetsPercent.size)) {
                 val offset = (range * offsetsPercent[i]) / 200
-                eqSliders[i].progress = (mid + offset).coerceIn(0, range)
+                val prog = (mid + offset).coerceIn(0, range)
+                eqSliders[i].progress = prog
+                val newLevel = (prog + minEQ).toShort()
+                runCatching { eq.setBandLevel(i.toShort(), newLevel) }
             }
 
             findViewById<SeekBar>(R.id.seekBass).progress = bass
+            runCatching { AudioEngine.bassBoost?.setStrength(bass.toShort()) }
+
             findViewById<SeekBar>(R.id.seekVirtualizer).progress = surround
+            runCatching { AudioEngine.virtualizer?.setStrength(surround.toShort()) }
+
             findViewById<SeekBar>(R.id.seekReverb).progress = reverb
+            runCatching { AudioEngine.presetReverb?.preset = reverb.toShort() }
         }
     }
 }
 
 // =========================================================================
-// 3. שירות המחוון הצף: טשטוש מסך בסגנון זכוכית כהה חלבית + סגירה בנגיעה בחוץ + אנימציות
+// 3. שירות המחוון הצף: חסימה הרמטית של מחוון המערכת + מעבר ווליום ליניארי חלק
 // =========================================================================
 class VolumeOverlayService : AccessibilityService() {
 
@@ -1668,11 +1716,19 @@ class VolumeOverlayService : AccessibilityService() {
     fun isEditModeActive(): Boolean = isInteractiveEditActive
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
-        if (!AudioEngine.isBoosterActive && !AudioEngine.sliderOnlyNoBoostMode) return super.onKeyEvent(event)
-        // בולע מיד את אירועי כפתורי הווליום כדי שמחוון המערכת של הטלפון לעולם לא יקפוץ לפנינו!
         val keyCode = event.keyCode
+        val isVolumeKey = (keyCode == KeyEvent.KEYCODE_VOLUME_UP ||
+                           keyCode == KeyEvent.KEYCODE_VOLUME_DOWN ||
+                           keyCode == KeyEvent.KEYCODE_VOLUME_MUTE)
 
-        if (keyCode != KeyEvent.KEYCODE_VOLUME_UP && keyCode != KeyEvent.KEYCODE_VOLUME_DOWN) {
+        // אם נבחר מחוון מותאם (1..17), תמיד תופסים את כפתורי הווליום כדי שמחוון המערכת לא יוכל להופיע לעולם!
+        val shouldInterceptVolume = AudioEngine.isBoosterActive ||
+                                    AudioEngine.sliderOnlyNoBoostMode ||
+                                    (AudioEngine.sliderStyleIndex != 0)
+
+        if (!shouldInterceptVolume) return super.onKeyEvent(event)
+
+        if (!isVolumeKey) {
             if (isVolUpPressed || isVolDownPressed) {
                 cancelVolumeHoldForSystemShortcut()
             }
@@ -1684,6 +1740,17 @@ class VolumeOverlayService : AccessibilityService() {
         if (isInteractiveEditActive) {
             if (event.action == KeyEvent.ACTION_DOWN) {
                 closeInteractiveEditMode()
+            }
+            return true
+        }
+
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_MUTE) {
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                val next = if (AudioEngine.currentTotalVolume > 0) 0 else 60
+                AudioEngine.applyVolume(this, next, showNativeSystemUI = (AudioEngine.sliderStyleIndex == 0))
+                if (AudioEngine.sliderStyleIndex != 0) {
+                    showCustomThemedOverlay(playEnterAnim = false)
+                }
             }
             return true
         }
@@ -1704,7 +1771,7 @@ class VolumeOverlayService : AccessibilityService() {
                     activeHoldDirection = if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) 1 else -1
                     volumeKeyHandler.removeCallbacks(delayedInitialStepRunnable)
                     volumeKeyHandler.removeCallbacks(holdRepeatRunnable)
-                    volumeKeyHandler.postDelayed(delayedInitialStepRunnable, 120L)
+                    volumeKeyHandler.postDelayed(delayedInitialStepRunnable, 115L)
                 }
                 return true
             }
@@ -1719,7 +1786,7 @@ class VolumeOverlayService : AccessibilityService() {
                 activeHoldDirection = 0
 
                 if (!comboShortcutDetected && !pendingSingleStepApplied && dirBeforeRelease != 0) {
-                    stepVolumeInDirection(dirBeforeRelease, stepAmount = 7)
+                    stepVolumeInDirection(dirBeforeRelease, stepAmount = 6)
                 }
                 comboShortcutDetected = false
                 pendingSingleStepApplied = false
@@ -1736,39 +1803,21 @@ class VolumeOverlayService : AccessibilityService() {
         volumeKeyHandler.removeCallbacks(holdRepeatRunnable)
     }
 
+    // מעבר ווליום ליניארי, רציף ויציב לחלוטין מ-0% עד התקרה (100% / 200% / 300%) ללא קפיצות!
     private fun stepVolumeInDirection(direction: Int, stepAmount: Int) {
-        val am = audioManager ?: return
         AudioEngine.refreshBluetoothAndStreamState(this)
 
         val useNativeSystemUI = (AudioEngine.sliderStyleIndex == 0)
         val maxAllowed = AudioEngine.getEffectiveMaxVolume()
 
-        if (AudioEngine.activeStreamType != 0) {
-            AudioEngine.currentTotalVolume = if (direction > 0) {
-                (AudioEngine.currentTotalVolume + stepAmount).coerceAtMost(100)
-            } else {
-                (AudioEngine.currentTotalVolume - stepAmount).coerceAtLeast(0)
-            }
+        val nextVol = if (direction > 0) {
+            (AudioEngine.currentTotalVolume + stepAmount).coerceAtMost(maxAllowed)
         } else {
-            val curSys = am.getStreamVolume(AudioManager.STREAM_MUSIC)
-            if (direction > 0) {
-                if (curSys < maxSysVol && AudioEngine.currentTotalVolume < 100) {
-                    val nextVol = (AudioEngine.currentTotalVolume + stepAmount).coerceAtMost(100)
-                    AudioEngine.currentTotalVolume = nextVol
-                } else {
-                    val baseVol = if (AudioEngine.currentTotalVolume < 100) 100 else AudioEngine.currentTotalVolume
-                    AudioEngine.currentTotalVolume = (baseVol + stepAmount).coerceAtMost(maxAllowed)
-                }
-            } else {
-                if (AudioEngine.currentTotalVolume > 100) {
-                    AudioEngine.currentTotalVolume = (AudioEngine.currentTotalVolume - stepAmount).coerceAtLeast(100)
-                } else {
-                    AudioEngine.currentTotalVolume = (AudioEngine.currentTotalVolume - stepAmount).coerceAtLeast(0)
-                }
-            }
+            (AudioEngine.currentTotalVolume - stepAmount).coerceAtLeast(0)
         }
 
-        AudioEngine.applyVolume(this, AudioEngine.currentTotalVolume, showNativeSystemUI = useNativeSystemUI)
+        AudioEngine.applyVolume(this, nextVol, showNativeSystemUI = useNativeSystemUI)
+
         if (useNativeSystemUI) {
             removeCustomOverlayImmediate()
             showNativeBadgeIfNeeded()
@@ -1812,8 +1861,8 @@ class VolumeOverlayService : AccessibilityService() {
 
     fun triggerPreviewOverlay(playEnterAnim: Boolean = true) {
         hideHandler.removeCallbacks(hideRunnable)
-        AudioEngine.suppressSystemUILoopUntil = SystemClock.elapsedRealtime() + 800L
-        AudioEngine.refreshBluetoothAndStreamState(this)
+        AudioEngine.suppressSystemUILoopUntil = SystemClock.elapsedRealtime() + 1000L
+        AudioEngine.updateBluetoothStatusOnly(this)
         if (AudioEngine.sliderStyleIndex == 0) {
             removeCustomOverlayImmediate()
             AudioEngine.applyVolume(this, AudioEngine.currentTotalVolume, showNativeSystemUI = true)
@@ -1849,9 +1898,7 @@ class VolumeOverlayService : AccessibilityService() {
         return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, resources.displayMetrics).roundToInt()
     }
 
-    // =====================================================================
-    // שכבת טשטוש זכוכית חלבית כהה ברקע (כמו בתמונה של האולר השווייצרי Pro fx-991)
-    // =====================================================================
+    @SuppressLint("ClickableViewAccessibility")
     private fun updateFrostedGlassBackdrop(animateIn: Boolean) {
         val wm = windowManager ?: return
         val cfg = SliderThemeManager.getCurrentConfig()
@@ -1863,7 +1910,6 @@ class VolumeOverlayService : AccessibilityService() {
             return
         }
 
-        // חישוב גוון הזכוכית הכהה העמוקה ברקע (כמו בתמונה) לפי עוצמת הטשטוש וההשחרה
         val blurTintAlpha = if (cfg.blurBackgroundEnabled) {
             ((cfg.blurStrengthPercent / 100f) * 145).roundToInt()
         } else 0
@@ -1874,8 +1920,13 @@ class VolumeOverlayService : AccessibilityService() {
         val frostedDarkColor = Color.argb(combinedAlpha, 14, 18, 28)
 
         var flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                    WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+
+        if (!cfg.dismissOnOutsideTouch) {
+            flags = flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        }
 
         if (cfg.blurBackgroundEnabled && cfg.blurStrengthPercent > 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             flags = flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
@@ -1890,7 +1941,6 @@ class VolumeOverlayService : AccessibilityService() {
         ).apply {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 blurBehindRadius = if (cfg.blurBackgroundEnabled) {
-                    // רדיוס טשטוש עמוק וחלבי (עד 110px) שנראה בדיוק כמו בתמונה!
                     ((cfg.blurStrengthPercent / 100f) * 110).roundToInt().coerceAtLeast(1)
                 } else {
                     0
@@ -1901,6 +1951,16 @@ class VolumeOverlayService : AccessibilityService() {
         if (backdropTouchThroughView == null) {
             backdropTouchThroughView = View(this).apply {
                 setBackgroundColor(frostedDarkColor)
+                setOnTouchListener { _, ev ->
+                    if (!isInteractiveEditActive &&
+                        SliderThemeManager.getCurrentConfig().dismissOnOutsideTouch &&
+                        (ev.actionMasked == MotionEvent.ACTION_DOWN || ev.actionMasked == MotionEvent.ACTION_OUTSIDE)
+                    ) {
+                        hideHandler.removeCallbacks(hideRunnable)
+                        dismissOverlaysAnimated()
+                    }
+                    false
+                }
                 if (animateIn) {
                     alpha = 0f
                     animate().alpha(1f).setDuration(240L).setListener(null).start()
@@ -1926,7 +1986,6 @@ class VolumeOverlayService : AccessibilityService() {
         val viewW = dp(cfg.widthDp.toFloat()).coerceIn(dp(44f), screenW)
         val viewH = dp(cfg.heightDp.toFloat()).coerceIn(dp(40f), screenH)
 
-        // הוספת FLAG_WATCH_OUTSIDE_TOUCH כדי שנגיעה בכל מקום במסך מחוץ למחוון תזהה מיד ותעלים אותו באנימציה!
         val flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                     WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
@@ -2020,9 +2079,6 @@ class VolumeOverlayService : AccessibilityService() {
         }
     }
 
-    // =====================================================================
-    // מעלים באנימציה חלקה ומותאמת גם את המחוון וגם את טשטוש הרקע יחד!
-    // =====================================================================
     fun dismissOverlaysAnimated() {
         removeBadge()
         val sliderView = customOverlayCanvasView
@@ -2126,7 +2182,6 @@ class VolumeOverlayService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // מונע לחלוטין לופ מול SystemUI בזמן שהמחוון המותאם אישית פועל!
         val now = SystemClock.elapsedRealtime()
         if (now < AudioEngine.suppressSystemUILoopUntil || AudioEngine.isInternalVolumeChange) return
 
