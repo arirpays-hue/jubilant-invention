@@ -30,7 +30,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 
 // =========================================================================
-// 1. מפרט ייעודי לכל אחד מ-18 סוגי המחוונים (0..14 הקיימים + 15..17 החדשים מהתמונות)
+// 1. מפרט ייעודי לכל אחד מ-18 סוגי המחוונים
 // =========================================================================
 data class StyleCapabilities(
     val styleIndex: Int,
@@ -128,10 +128,9 @@ object SliderThemeManager {
             14, listOf("מילוי עליון", "מילוי תחתון", "רקע קפסולה", "מסגרת קפסולה", "עיגול ראש מודגש", "סמל וטקסט"),
             true, true, true, "רוחב קפסולה", null
         ),
-        // --- 3 המחוונים החדשים מהתמונות (15, 16, 17) ---
         15 to StyleCapabilities(
             15, listOf("ניאון ציאן ראשי", "ניאון מג'נטה עליון", "רקע לוח HUD כהה", "מסגרת וסוגרי HUD", "טקסט VOLUME ואחוזים", "מסגרת ידית גרירה"),
-            true, true, false, "עובי צינור הניאון", "צפיפות שנתות טלמטריה"
+            true, true, true, "עובי צינור הניאון", "צפיפות שנתות טלמטריה"
         ),
         16 to StyleCapabilities(
             16, listOf("הילת צינור ציאן", "ליבת קורל-כתום פנימית", "רקע זכוכית חלבית", "מסגרת זכוכית", "צבע סמלי רמקול/רטט/השתק", "בועית רמקול עליונה"),
@@ -204,7 +203,6 @@ object SliderThemeManager {
             intArrayOf(Color.parseColor("#F59E0B"), Color.parseColor("#D97706"), Color.parseColor("#27272A"), Color.parseColor("#52525B"), Color.parseColor("#FDE047"), Color.parseColor("#FFFFFF")),
             94, true, 45, false, 10, 70, 270, 94, 50, 34, 2, 95, 12, 65, 50
         ),
-        // --- ברירות המחדל המדויקות ל-3 המחוונים החדשים מהתמונות ---
         15 to StyleConfig(
             intArrayOf(Color.parseColor("#00F0FF"), Color.parseColor("#FF00A0"), Color.parseColor("#080D1A"), Color.parseColor("#00E5FF"), Color.parseColor("#00F0FF"), Color.parseColor("#00FFFF")),
             90, true, 60, false, 20, 148, 340, 12, 48, 16, 1, 100, 12, 50, 55
@@ -429,11 +427,303 @@ class TrueColorWheelView(context: Context) : View(context) {
 }
 
 // =========================================================================
-// 3. ציור סמלים וקטוריים בסיסיים
+// 3. מנוע ציור סמלים תואמי ערכת נושא לכל הערוצים + סמל בלוטות' קטן צמוד לרמקול
+//    ערוצים: 0 = מדיה/רמקול, 1 = עוצמת צלצול, 2 = התראות, 3 = שעון מעורר, 4 = שיחת טלפון
 // =========================================================================
 object VectorIconRenderer {
     private val iconPath = Path()
     private val arcRect = RectF()
+
+    // מצייר אוטומטית את הסמל של הערוץ שאותו מתאימים כרגע, בעיצוב התואם למחוון הפעיל!
+    fun drawActiveStreamIcon(
+        canvas: Canvas,
+        cx: Float,
+        cy: Float,
+        size: Float,
+        color: Int,
+        styleIndex: Int,
+        volumePercent: Int,
+        streamType: Int = AudioEngine.activeStreamType,
+        isBluetoothConnected: Boolean = AudioEngine.isBluetoothConnected,
+        paint: Paint
+    ) {
+        when (streamType) {
+            // 0: מדיה (רמקול + סמל בלוטות' קטן לידו אם המכשיר מחובר לבלוטות'!)
+            0 -> {
+                val shiftX = if (isBluetoothConnected) -size * 0.14f else 0f
+                drawStyledSpeakerIcon(canvas, cx + shiftX, cy, size, color, styleIndex, volumePercent, paint)
+                if (isBluetoothConnected) {
+                    drawMiniBluetoothBadge(
+                        canvas,
+                        cx + size * 0.46f,
+                        cy - size * 0.16f,
+                        size * 0.48f,
+                        color,
+                        styleIndex,
+                        paint
+                    )
+                }
+            }
+            // 1: עוצמת צלצול (פעמון מצלצל עם גלי תהודה בצדדים)
+            1 -> drawThemedRingVolumeIcon(canvas, cx, cy, size, color, styleIndex, paint)
+            // 2: התראות (פעמון התראות / בועת הודעה מותאמת לערכת הנושא)
+            2 -> drawThemedNotificationIcon(canvas, cx, cy, size, color, styleIndex, paint)
+            // 3: שעון מעורר (שעון עם שני פעמונים עליונים ומחוגים)
+            3 -> drawThemedAlarmIcon(canvas, cx, cy, size, color, styleIndex, paint)
+            // 4: שיחת טלפון (שפופרת טלפון עם גלי קול)
+            else -> {
+                drawThemedPhoneCallIcon(canvas, cx, cy, size, color, styleIndex, paint)
+                if (isBluetoothConnected) {
+                    drawMiniBluetoothBadge(
+                        canvas,
+                        cx + size * 0.44f,
+                        cy - size * 0.18f,
+                        size * 0.45f,
+                        color,
+                        styleIndex,
+                        paint
+                    )
+                }
+            }
+        }
+    }
+
+    // סמל בלוטות' קטן וחד ליד סמל הרמקול במקרה שהמכשיר מחובר לבלוטות'
+    fun drawMiniBluetoothBadge(
+        canvas: Canvas,
+        bx: Float,
+        by: Float,
+        bSize: Float,
+        color: Int,
+        styleIndex: Int,
+        paint: Paint
+    ) {
+        if (bSize <= 2f) return
+        paint.shader = null
+        val prevStyle = paint.style
+        val prevStroke = paint.strokeWidth
+        val prevCap = paint.strokeCap
+        paint.color = color
+
+        if (styleIndex == 8) {
+            // סמל בלוטות' מפוקסל 8-Bit
+            paint.style = Paint.Style.FILL
+            val u = bSize * 0.16f
+            canvas.drawRect(bx - u * 0.5f, by - 3 * u, bx + u * 0.5f, by + 3 * u, paint)
+            canvas.drawRect(bx + u * 0.5f, by - 2 * u, bx + 2 * u, by - u, paint)
+            canvas.drawRect(bx + u * 0.5f, by + u, bx + 2 * u, by + 2 * u, paint)
+            canvas.drawRect(bx - 2 * u, by - 1.5f * u, bx - u * 0.5f, by - 0.5f * u, paint)
+            canvas.drawRect(bx - 2 * u, by + 0.5f * u, bx - u * 0.5f, by + 1.5f * u, paint)
+        } else {
+            // רונת ה-Bluetooth הווקטורית הקלאסית (B זוויתי)
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = (bSize * 0.14f).coerceAtLeast(1.8f)
+            paint.strokeCap = Paint.Cap.ROUND
+            paint.strokeJoin = Paint.Join.ROUND
+
+            val h = bSize * 0.48f
+            val w = bSize * 0.34f
+            iconPath.reset()
+            iconPath.moveTo(bx, by - h)
+            iconPath.lineTo(bx + w, by - h * 0.48f)
+            iconPath.lineTo(bx - w * 0.85f, by + h * 0.48f)
+            iconPath.moveTo(bx - w * 0.85f, by - h * 0.48f)
+            iconPath.lineTo(bx + w, by + h * 0.48f)
+            iconPath.lineTo(bx, by + h)
+            iconPath.lineTo(bx, by - h)
+            canvas.drawPath(iconPath, paint)
+        }
+
+        paint.style = prevStyle
+        paint.strokeWidth = prevStroke
+        paint.strokeCap = prevCap
+    }
+
+    // סמל עוצמת צלצול (פעמון עם קשתות צלצול משני הצדדים) מותאם לערכת הנושא
+    fun drawThemedRingVolumeIcon(
+        canvas: Canvas,
+        cx: Float,
+        cy: Float,
+        size: Float,
+        color: Int,
+        styleIndex: Int,
+        paint: Paint
+    ) {
+        paint.shader = null
+        val prevStyle = paint.style
+        val prevStroke = paint.strokeWidth
+        paint.color = color
+
+        if (styleIndex == 8) {
+            // פעמון צלצול 8-Bit מפוקסל
+            paint.style = Paint.Style.FILL
+            val u = size * 0.14f
+            canvas.drawRect(cx - u, cy - 3 * u, cx + u, cy - 2 * u, paint)
+            canvas.drawRect(cx - 2 * u, cy - 2 * u, cx + 2 * u, cy + u, paint)
+            canvas.drawRect(cx - 3 * u, cy + u, cx + 3 * u, cy + 2 * u, paint)
+            canvas.drawRect(cx - u * 0.7f, cy + 2.3f * u, cx + u * 0.7f, cy + 3.3f * u, paint)
+            // קווי רטט צלצול בצדדים
+            canvas.drawRect(cx - 4.2f * u, cy - 2 * u, cx - 3.3f * u, cy, paint)
+            canvas.drawRect(cx + 3.3f * u, cy - 2 * u, cx + 4.2f * u, cy, paint)
+        } else {
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = (size * 0.115f).coerceAtLeast(2f)
+            paint.strokeCap = if (styleIndex == 4 || styleIndex == 15) Paint.Cap.SQUARE else Paint.Cap.ROUND
+            paint.strokeJoin = Paint.Join.ROUND
+
+            val w = size * 0.30f
+            val topY = cy - size * 0.28f
+            val botY = cy + size * 0.18f
+
+            iconPath.reset()
+            iconPath.moveTo(cx - w, botY)
+            iconPath.lineTo(cx - w * 0.75f, cy - size * 0.05f)
+            iconPath.quadTo(cx, topY - size * 0.10f, cx + w * 0.75f, cy - size * 0.05f)
+            iconPath.lineTo(cx + w, botY)
+            iconPath.close()
+            canvas.drawPath(iconPath, paint)
+
+            // גלי צלצול משמאל ומימין לפעמון
+            arcRect.set(cx - w * 1.65f, cy - size * 0.24f, cx - w * 0.65f, cy + size * 0.12f)
+            canvas.drawArc(arcRect, 135f, 90f, false, paint)
+            arcRect.set(cx + w * 0.65f, cy - size * 0.24f, cx + w * 1.65f, cy + size * 0.12f)
+            canvas.drawArc(arcRect, -45f, 90f, false, paint)
+
+            paint.style = Paint.Style.FILL
+            canvas.drawCircle(cx, botY + size * 0.11f, size * 0.08f, paint)
+        }
+
+        paint.style = prevStyle
+        paint.strokeWidth = prevStroke
+    }
+
+    // סמל התראות (פעמון התראות נקי עם נקודת חיווי עליונה) מותאם לערכת הנושא
+    fun drawThemedNotificationIcon(
+        canvas: Canvas,
+        cx: Float,
+        cy: Float,
+        size: Float,
+        color: Int,
+        styleIndex: Int,
+        paint: Paint
+    ) {
+        paint.shader = null
+        val prevStyle = paint.style
+        val prevStroke = paint.strokeWidth
+        paint.color = color
+
+        if (styleIndex == 8) {
+            paint.style = Paint.Style.FILL
+            val u = size * 0.14f
+            canvas.drawRect(cx - 2.5f * u, cy - 2 * u, cx + 2.5f * u, cy + u, paint)
+            canvas.drawRect(cx - 1.5f * u, cy + u, cx, cy + 2.5f * u, paint)
+        } else {
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = (size * 0.115f).coerceAtLeast(2f)
+            paint.strokeCap = Paint.Cap.ROUND
+            paint.strokeJoin = Paint.Join.ROUND
+
+            val w = size * 0.32f
+            val topY = cy - size * 0.30f
+            val botY = cy + size * 0.18f
+
+            iconPath.reset()
+            iconPath.moveTo(cx - w, botY)
+            iconPath.lineTo(cx - w * 0.75f, cy - size * 0.06f)
+            iconPath.quadTo(cx, topY - size * 0.10f, cx + w * 0.75f, cy - size * 0.06f)
+            iconPath.lineTo(cx + w, botY)
+            iconPath.close()
+            canvas.drawPath(iconPath, paint)
+
+            paint.style = Paint.Style.FILL
+            canvas.drawCircle(cx, botY + size * 0.11f, size * 0.085f, paint)
+            // נקודת התראה (Badge Dot) בפינה הימנית העליונה של הפעמון
+            canvas.drawCircle(cx + w * 0.78f, topY + size * 0.08f, size * 0.10f, paint)
+        }
+
+        paint.style = prevStyle
+        paint.strokeWidth = prevStroke
+    }
+
+    // סמל שעון מעורר מותאם לערכת הנושא
+    fun drawThemedAlarmIcon(
+        canvas: Canvas,
+        cx: Float,
+        cy: Float,
+        size: Float,
+        color: Int,
+        styleIndex: Int,
+        paint: Paint
+    ) {
+        paint.shader = null
+        val prevStyle = paint.style
+        val prevStroke = paint.strokeWidth
+        paint.color = color
+
+        if (styleIndex == 8) {
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = size * 0.12f
+            val r = size * 0.32f
+            canvas.drawRect(cx - r, cy - r, cx + r, cy + r, paint)
+            canvas.drawLine(cx, cy, cx, cy - r * 0.6f, paint)
+            canvas.drawLine(cx, cy, cx + r * 0.5f, cy, paint)
+        } else {
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = (size * 0.115f).coerceAtLeast(2f)
+            paint.strokeCap = Paint.Cap.ROUND
+
+            val r = size * 0.34f
+            canvas.drawCircle(cx, cy + size * 0.04f, r, paint)
+            // מחוגי השעון
+            canvas.drawLine(cx, cy + size * 0.04f, cx, cy - size * 0.14f, paint)
+            canvas.drawLine(cx, cy + size * 0.04f, cx + size * 0.14f, cy + size * 0.04f, paint)
+            // שני פעמונים מעל השעון
+            canvas.drawLine(cx - r * 0.88f, cy - r * 0.62f, cx - r * 0.38f, cy - r * 0.96f, paint)
+            canvas.drawLine(cx + r * 0.88f, cy - r * 0.62f, cx + r * 0.38f, cy - r * 0.96f, paint)
+        }
+
+        paint.style = prevStyle
+        paint.strokeWidth = prevStroke
+    }
+
+    // סמל שיחת טלפון מותאם לערכת הנושא
+    fun drawThemedPhoneCallIcon(
+        canvas: Canvas,
+        cx: Float,
+        cy: Float,
+        size: Float,
+        color: Int,
+        styleIndex: Int,
+        paint: Paint
+    ) {
+        paint.shader = null
+        val prevStyle = paint.style
+        val prevStroke = paint.strokeWidth
+        paint.color = color
+
+        if (styleIndex == 8) {
+            paint.style = Paint.Style.FILL
+            val u = size * 0.15f
+            canvas.drawRect(cx - 2.5f * u, cy - 2.5f * u, cx - 0.5f * u, cy - 0.5f * u, paint)
+            canvas.drawRect(cx - 1.5f * u, cy - 1.5f * u, cx + 1.5f * u, cy + 1.5f * u, paint)
+            canvas.drawRect(cx + 0.5f * u, cy + 0.5f * u, cx + 2.5f * u, cy + 2.5f * u, paint)
+        } else {
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = (size * 0.13f).coerceAtLeast(2.2f)
+            paint.strokeCap = Paint.Cap.ROUND
+
+            val r = size * 0.33f
+            arcRect.set(cx - r, cy - r, cx + r, cy + r)
+            canvas.drawArc(arcRect, 125f, 105f, false, paint)
+
+            paint.style = Paint.Style.FILL
+            canvas.drawCircle(cx - r * 0.52f, cy - r * 0.65f, size * 0.105f, paint)
+            canvas.drawCircle(cx - r * 0.65f, cy + r * 0.52f, size * 0.105f, paint)
+        }
+
+        paint.style = prevStyle
+        paint.strokeWidth = prevStroke
+    }
 
     fun drawStyledSpeakerIcon(
         canvas: Canvas,
@@ -466,7 +756,7 @@ object VectorIconRenderer {
                     canvas.drawRect(cx + 3.5f * u, cy - 2.5f * u, cx + 4.5f * u, cy + 2.5f * u, paint)
                 }
             }
-            4 -> {
+            4, 15 -> {
                 paint.style = Paint.Style.STROKE
                 paint.strokeWidth = size * 0.13f
                 paint.color = color
@@ -528,7 +818,7 @@ object VectorIconRenderer {
 }
 
 // =========================================================================
-// 4. תצוגת המחוון הצף (כולל חיתוך קפסולה כפול לזכוכית + כפתורים פעילים + אנימציית צבעים)
+// 4. תצוגת המחוון הצף (כל הסגנונות מציגים את סמל הערוץ הפעיל + בלוטות' צמוד!)
 // =========================================================================
 class CustomThemedSliderOverlayView(
     context: Context,
@@ -569,6 +859,9 @@ class CustomThemedSliderOverlayView(
         val h = height.toFloat()
         if (w <= 0f || h <= 0f) return
 
+        // מרענן זיהוי חיבור בלוטות' וערוץ פעיל בזמן אמת לפני כל ציור
+        AudioEngine.refreshBluetoothAndStreamState(context)
+
         val cfg = SliderThemeManager.getCurrentConfig()
         val maxScale = AudioEngine.getEffectiveMaxVolume().toFloat()
         val vol = AudioEngine.currentTotalVolume.coerceIn(0, maxScale.toInt())
@@ -588,6 +881,8 @@ class CustomThemedSliderOverlayView(
         val icoSize = dp(17f * (cfg.iconSizePercent / 100f))
         val txtPx = sp(cfg.textSizeSp.toFloat())
         val topEditOffset = if (isEditPositionMode) dp(36f) else 0f
+        val streamType = AudioEngine.activeStreamType
+        val btConnected = AudioEngine.isBluetoothConnected
 
         if (AudioEngine.sliderStyleIndex >= 11) {
             ExtendedSkinsRenderer.drawExtendedStyle(
@@ -598,7 +893,6 @@ class CustomThemedSliderOverlayView(
                 cornerPx = cornerPx, brdW = brdW, icoSize = icoSize, txtPx = txtPx,
                 dpFn = ::dp, paint = paint
             )
-            // אם זה סגנון 17 (צבעי הקשת המשתנים בהדרגה), מרעננים את הציור ברציפות ב-60FPS!
             if (AudioEngine.sliderStyleIndex == 17) {
                 postInvalidateOnAnimation()
             }
@@ -610,7 +904,6 @@ class CustomThemedSliderOverlayView(
             val safeVerticalInset = max(safePillRad * 0.65f, dp(22f))
 
             when (AudioEngine.sliderStyleIndex) {
-                // 1. עיצוב הזכוכית היוקרתי (מתוקן עם חיתוך קפסולה כפול כך שקו הסאונד לעולם לא גולש מהשוליים המעגליים!)
                 1 -> {
                     val highlightStrength = (cfg.extraParam1 / 100f).coerceIn(0.1f, 1f)
                     paint.style = Paint.Style.FILL
@@ -639,7 +932,6 @@ class CustomThemedSliderOverlayView(
                     paint.color = applyAlpha(cfg.colors[3], 28)
                     canvas.drawRoundRect(innerRect, tubeCornerRad, tubeCornerRad, paint)
 
-                    // חיתוך פנימי מדויק לנתיב הצינור המעוגל: מונע ב-100% כל גלישה של קו הסאונד מעבר לשוליים המעגליים!
                     canvas.save()
                     innerTrackClipPath.reset()
                     innerTrackClipPath.addRoundRect(innerRect, tubeCornerRad, tubeCornerRad, Path.Direction.CW)
@@ -659,10 +951,10 @@ class CustomThemedSliderOverlayView(
                     canvas.drawText("$vol%", w / 2f, rect.top + safeVerticalInset, paint)
 
                     val spkCy = rect.bottom - safeVerticalInset * 0.78f
-                    VectorIconRenderer.drawStyledSpeakerIcon(
-                        canvas, w / 2f, spkCy, icoSize, cfg.colors[4], 1, vol, paint
+                    VectorIconRenderer.drawActiveStreamIcon(
+                        canvas, w / 2f, spkCy, icoSize, cfg.colors[4], 1, vol, streamType, btConnected, paint
                     )
-                    ExtendedSkinsRenderer.hitMuteButton.set(rect.left, spkCy - dp(20f), rect.right, rect.bottom)
+                    ExtendedSkinsRenderer.hitStreamCycleButton.set(rect.left, spkCy - dp(20f), rect.right, rect.bottom)
                     canvas.restore()
 
                     if (brdW > 0f) {
@@ -701,10 +993,10 @@ class CustomThemedSliderOverlayView(
                     canvas.drawText("$vol%", w / 2f, rect.top + inset, paint)
 
                     val spkCy = rect.bottom - inset * 0.85f
-                    VectorIconRenderer.drawStyledSpeakerIcon(
-                        canvas, w / 2f, spkCy, icoSize * 0.9f, cfg.colors[2], 2, vol, paint
+                    VectorIconRenderer.drawActiveStreamIcon(
+                        canvas, w / 2f, spkCy, icoSize * 0.9f, cfg.colors[2], 2, vol, streamType, btConnected, paint
                     )
-                    ExtendedSkinsRenderer.hitMuteButton.set(left, spkCy - dp(18f), left + barW, rect.bottom)
+                    ExtendedSkinsRenderer.hitStreamCycleButton.set(left, spkCy - dp(18f), left + barW, rect.bottom)
                     canvas.restore()
                 }
 
@@ -721,14 +1013,14 @@ class CustomThemedSliderOverlayView(
                     }
 
                     val lineY = rect.top + rect.height() * 0.65f
-                    val startX = dp(52f)
+                    val startX = dp(56f)
                     val endX = w - dp(22f)
                     val thumbX = startX + (endX - startX) * ratio
 
-                    VectorIconRenderer.drawStyledSpeakerIcon(
-                        canvas, dp(28f), lineY - dp(2f), icoSize, c5, 3, vol, paint
+                    VectorIconRenderer.drawActiveStreamIcon(
+                        canvas, dp(28f), lineY - dp(2f), icoSize, c5, 3, vol, streamType, btConnected, paint
                     )
-                    ExtendedSkinsRenderer.hitMuteButton.set(0f, 0f, dp(48f), h)
+                    ExtendedSkinsRenderer.hitStreamCycleButton.set(0f, 0f, dp(52f), h)
 
                     val lineThick = dp(2f + (cfg.extraParam2 / 100f) * 6f)
                     paint.style = Paint.Style.STROKE
@@ -747,7 +1039,8 @@ class CustomThemedSliderOverlayView(
                     paint.color = c5
                     paint.textSize = txtPx
                     paint.textAlign = Paint.Align.LEFT
-                    canvas.drawText("עוצמת שמע: $vol%", startX, rect.top + rect.height() * 0.36f, paint)
+                    val streamName = AudioEngine.getActiveStreamHebrewLabel()
+                    canvas.drawText("$streamName: $vol%", startX, rect.top + rect.height() * 0.36f, paint)
                 }
 
                 4 -> {
@@ -789,10 +1082,10 @@ class CustomThemedSliderOverlayView(
                     canvas.drawText("$vol%", w / 2f, rect.top + safeVerticalInset, paint)
 
                     val spkCy = rect.bottom - safeVerticalInset * 0.8f
-                    VectorIconRenderer.drawStyledSpeakerIcon(
-                        canvas, w / 2f, spkCy, icoSize, c5, 4, vol, paint
+                    VectorIconRenderer.drawActiveStreamIcon(
+                        canvas, w / 2f, spkCy, icoSize, c5, 4, vol, streamType, btConnected, paint
                     )
-                    ExtendedSkinsRenderer.hitMuteButton.set(rect.left, spkCy - dp(18f), rect.right, rect.bottom)
+                    ExtendedSkinsRenderer.hitStreamCycleButton.set(rect.left, spkCy - dp(18f), rect.right, rect.bottom)
                 }
 
                 5 -> {
@@ -830,10 +1123,10 @@ class CustomThemedSliderOverlayView(
                     canvas.drawText("$vol%", cx, cy + dp(5f), paint)
 
                     val spkCy = rect.bottom - safeVerticalInset * 0.85f
-                    VectorIconRenderer.drawStyledSpeakerIcon(
-                        canvas, cx, spkCy, icoSize, c5, 5, vol, paint
+                    VectorIconRenderer.drawActiveStreamIcon(
+                        canvas, cx, spkCy, icoSize, c5, 5, vol, streamType, btConnected, paint
                     )
-                    ExtendedSkinsRenderer.hitMuteButton.set(rect.left, spkCy - dp(18f), rect.right, rect.bottom)
+                    ExtendedSkinsRenderer.hitStreamCycleButton.set(rect.left, spkCy - dp(18f), rect.right, rect.bottom)
                 }
 
                 6 -> {
@@ -878,10 +1171,10 @@ class CustomThemedSliderOverlayView(
                     canvas.drawText("$vol%", w / 2f, rect.top + safeVerticalInset, paint)
 
                     val spkCy = rect.bottom - safeVerticalInset * 0.8f
-                    VectorIconRenderer.drawStyledSpeakerIcon(
-                        canvas, w / 2f, spkCy, icoSize, c5, 6, vol, paint
+                    VectorIconRenderer.drawActiveStreamIcon(
+                        canvas, w / 2f, spkCy, icoSize, c5, 6, vol, streamType, btConnected, paint
                     )
-                    ExtendedSkinsRenderer.hitMuteButton.set(rect.left, spkCy - dp(18f), rect.right, rect.bottom)
+                    ExtendedSkinsRenderer.hitStreamCycleButton.set(rect.left, spkCy - dp(18f), rect.right, rect.bottom)
                 }
 
                 7 -> {
@@ -913,10 +1206,10 @@ class CustomThemedSliderOverlayView(
                     canvas.drawText("$vol%", w / 2f, rect.top + inset, paint)
 
                     val spkCy = rect.bottom - inset * 0.85f
-                    VectorIconRenderer.drawStyledSpeakerIcon(
-                        canvas, w / 2f, spkCy, icoSize, cfg.colors[3], 7, vol, paint
+                    VectorIconRenderer.drawActiveStreamIcon(
+                        canvas, w / 2f, spkCy, icoSize, cfg.colors[3], 7, vol, streamType, btConnected, paint
                     )
-                    ExtendedSkinsRenderer.hitMuteButton.set(left, spkCy - dp(18f), left + pillW, rect.bottom)
+                    ExtendedSkinsRenderer.hitStreamCycleButton.set(left, spkCy - dp(18f), left + pillW, rect.bottom)
                     canvas.restore()
 
                     if (brdW > 0f) {
@@ -964,10 +1257,10 @@ class CustomThemedSliderOverlayView(
                     canvas.drawText("$vol%", w / 2f, rect.top + dp(21f), paint)
 
                     val spkCy = rect.bottom - dp(16f)
-                    VectorIconRenderer.drawStyledSpeakerIcon(
-                        canvas, w / 2f, spkCy, icoSize, c5, 8, vol, paint
+                    VectorIconRenderer.drawActiveStreamIcon(
+                        canvas, w / 2f, spkCy, icoSize, c5, 8, vol, streamType, btConnected, paint
                     )
-                    ExtendedSkinsRenderer.hitMuteButton.set(rect.left, spkCy - dp(18f), rect.right, rect.bottom)
+                    ExtendedSkinsRenderer.hitStreamCycleButton.set(rect.left, spkCy - dp(18f), rect.right, rect.bottom)
                 }
 
                 9 -> {
@@ -997,8 +1290,14 @@ class CustomThemedSliderOverlayView(
                     paint.textAlign = Paint.Align.CENTER
                     val distPx = dp(16f + (cfg.extraParam2 / 100f) * 20f)
                     val textX = if (isRight) xPos - distPx else xPos + barW + distPx
-                    val safeY = fillTop.coerceIn(rect.top + dp(18f), h - dp(18f))
+                    val safeY = fillTop.coerceIn(rect.top + dp(18f), h - dp(36f))
                     canvas.drawText("$vol%", textX, safeY, paint)
+
+                    val icoY = h - dp(18f)
+                    VectorIconRenderer.drawActiveStreamIcon(
+                        canvas, textX, icoY, icoSize * 0.78f, cfg.colors[2], 9, vol, streamType, btConnected, paint
+                    )
+                    ExtendedSkinsRenderer.hitStreamCycleButton.set(0f, h - dp(36f), w, h)
                 }
 
                 else -> {
@@ -1045,10 +1344,10 @@ class CustomThemedSliderOverlayView(
                     canvas.drawText("$vol%", w / 2f, rect.top + safeVerticalInset, paint)
 
                     val spkCy = rect.bottom - safeVerticalInset * 0.8f
-                    VectorIconRenderer.drawStyledSpeakerIcon(
-                        canvas, w / 2f, spkCy, icoSize, c5, 10, vol, paint
+                    VectorIconRenderer.drawActiveStreamIcon(
+                        canvas, w / 2f, spkCy, icoSize, c5, 10, vol, streamType, btConnected, paint
                     )
-                    ExtendedSkinsRenderer.hitMuteButton.set(rect.left, spkCy - dp(18f), rect.right, rect.bottom)
+                    ExtendedSkinsRenderer.hitStreamCycleButton.set(rect.left, spkCy - dp(18f), rect.right, rect.bottom)
                 }
             }
         }
@@ -1072,24 +1371,34 @@ class CustomThemedSliderOverlayView(
         }
     }
 
-    // מפעיל את הפעולה האמיתית של כל כפתור על המחוון כפי שציורו מרמז!
     private fun handleInteractiveOverlayButtonClick(x: Float, y: Float): Boolean {
         val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return false
 
-        // 1. כפתור רמקול פעיל -> מפעיל צליל רגיל ומחזיר ווליום אם היה מושתק
-        if (ExtendedSkinsRenderer.hitSpeakerButton.contains(x, y)) {
-            runCatching { am.ringerMode = AudioManager.RINGER_MODE_NORMAL }
-            if (AudioEngine.currentTotalVolume == 0) {
-                val restored = lastNonZeroVolume.coerceAtLeast(60)
-                AudioEngine.currentTotalVolume = restored
-                onVolumeDragged(restored)
-            }
-            Toast.makeText(context, "מצב צליל פעיל 🔊", Toast.LENGTH_SHORT).show()
+        // 0. לחיצה על סמל הערוץ במחוון -> מחליפה בין מדיה / צלצול / התראות / שעון מעורר / טלפון!
+        if (ExtendedSkinsRenderer.hitStreamCycleButton.contains(x, y)) {
+            AudioEngine.cycleNextStream(context)
+            Toast.makeText(
+                context,
+                "ערוץ פעיל: ${AudioEngine.getActiveStreamHebrewLabel()} (${AudioEngine.currentTotalVolume}%)",
+                Toast.LENGTH_SHORT
+            ).show()
             invalidate()
             return true
         }
 
-        // 2. כפתור רטט -> מעביר למצב רטט ומבצע פידבק רטט
+        // 1. כפתור רמקול משני (או החלפת ערוץ בסגנון 16)
+        if (ExtendedSkinsRenderer.hitSpeakerButton.contains(x, y)) {
+            AudioEngine.cycleNextStream(context)
+            Toast.makeText(
+                context,
+                "ערוץ פעיל: ${AudioEngine.getActiveStreamHebrewLabel()}",
+                Toast.LENGTH_SHORT
+            ).show()
+            invalidate()
+            return true
+        }
+
+        // 2. כפתור רטט
         if (ExtendedSkinsRenderer.hitVibrateButton.contains(x, y)) {
             runCatching { am.ringerMode = AudioManager.RINGER_MODE_VIBRATE }
             runCatching {
@@ -1101,31 +1410,31 @@ class CustomThemedSliderOverlayView(
                     vib?.vibrate(60)
                 }
             }
-            Toast.makeText(context, "מצב רטט הופעל 📳", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "מצב רטט הופעל", Toast.LENGTH_SHORT).show()
             invalidate()
             return true
         }
 
-        // 3. כפתור השתק -> משתיק ל-0% (או משחזר אם כבר ב-0%)
+        // 3. כפתור השתק
         if (ExtendedSkinsRenderer.hitMuteButton.contains(x, y)) {
             if (AudioEngine.currentTotalVolume > 0) {
                 lastNonZeroVolume = AudioEngine.currentTotalVolume
                 AudioEngine.currentTotalVolume = 0
                 runCatching { am.ringerMode = AudioManager.RINGER_MODE_SILENT }
                 onVolumeDragged(0)
-                Toast.makeText(context, "הושתק 🔇", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "הושתק", Toast.LENGTH_SHORT).show()
             } else {
                 val restored = lastNonZeroVolume.coerceAtLeast(50)
                 AudioEngine.currentTotalVolume = restored
                 runCatching { am.ringerMode = AudioManager.RINGER_MODE_NORMAL }
                 onVolumeDragged(restored)
-                Toast.makeText(context, "ביטול השתקה ($restored%) 🔊", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "ביטול השתקה ($restored%)", Toast.LENGTH_SHORT).show()
             }
             invalidate()
             return true
         }
 
-        // 4. כפתור Play/Pause (בסגנונות 11 ו-12) -> מפעיל/עוצר מוזיקה מתנגנת
+        // 4. כפתור Play/Pause
         if (ExtendedSkinsRenderer.hitPlayPauseButton.contains(x, y)) {
             runCatching {
                 val downEvent = KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
@@ -1133,11 +1442,11 @@ class CustomThemedSliderOverlayView(
                 am.dispatchMediaKeyEvent(downEvent)
                 am.dispatchMediaKeyEvent(upEvent)
             }
-            Toast.makeText(context, "ניגון / השהיית מדיה ⏯", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "ניגון / השהיית מדיה", Toast.LENGTH_SHORT).show()
             return true
         }
 
-        // 5. כפתור החלפת צד מסך ⇄ (בסגנון 11)
+        // 5. כפתור החלפת צד מסך ⇄
         if (ExtendedSkinsRenderer.hitSwapSideButton.contains(x, y)) {
             val cfg = SliderThemeManager.getCurrentConfig()
             cfg.posXPercent = if (cfg.posXPercent >= 50) 6 else 94
@@ -1175,14 +1484,12 @@ class CustomThemedSliderOverlayView(
         }
 
         if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-            // בדיקה אם המשתמש לחץ על אחד מכפתורי הפעולה המצוירים על המחוון (רמקול / רטט / השתק / Play)
             if (handleInteractiveOverlayButtonClick(event.x, event.y)) {
                 return true
             }
         }
 
         if (event.action == MotionEvent.ACTION_DOWN || event.action == MotionEvent.ACTION_MOVE) {
-            // בסגנונות 16 ו-17 שבהם יש עמודת כפתורים בצד ימין, גרירת הווליום מתבצעת בצד השמאלי של הכרטיסייה
             if ((AudioEngine.sliderStyleIndex == 16 || AudioEngine.sliderStyleIndex == 17) &&
                 event.x > width * 0.58f && event.action == MotionEvent.ACTION_DOWN
             ) {
