@@ -7,6 +7,7 @@ import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
+import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.AudioPlaybackConfiguration
 import android.media.audiofx.BassBoost
@@ -39,7 +40,7 @@ import com.google.android.material.card.MaterialCardView
 import kotlin.math.roundToInt
 
 // =========================================================================
-// 1. מנוע סאונד + מנוע AI אוטונומי לשיפור שירים + 18 סגנונות מחוון
+// 1. מנוע סאונד + מנוע AI לשיפור שירים + ניהול 5 ערוצי שמע וזיהוי בלוטות' חי
 // =========================================================================
 object AudioEngine {
     var loudnessEnhancer: LoudnessEnhancer? = null
@@ -49,19 +50,26 @@ object AudioEngine {
     var presetReverb: PresetReverb? = null
 
     var currentTotalVolume: Int = 100
+    var savedMediaBoostVolume: Int = 100
     var isBoosterActive: Boolean = true
     var sliderOnlyNoBoostMode: Boolean = false
     var allow300PercentBoost: Boolean = false
+
+    // ניהול ערוץ שמע נוכחי וחיבור בלוטות' עבור סמלי המחוון
+    // 0 = מדיה, 1 = עוצמת צלצול, 2 = התראות, 3 = שעון מעורר, 4 = שיחת טלפון
+    var activeStreamType: Int = 0
+    var isBluetoothConnected: Boolean = false
+    private var manualStreamOverrideUntil: Long = 0L
 
     var antiClippingEnabled: Boolean = true
     var hiResOptimizerEnabled: Boolean = true
     var clarityLevel: Int = 50
     var warmthLevel: Int = 40
 
-    // מנוע ה-AI המוכן לשיפור שירים לאיכות גבוהה במיוחד (AI Neural Song Enhancer)
+    // מנוע ה-AI המוכן לשיפור שירים לאיכות גבוהה במיוחד
     var aiSongEngineEnabled: Boolean = true
-    var aiPresetMode: Int = 0             // 0 = Auto Master, 1 = Deep Bass, 2 = Crystal Vocal, 3 = 3D Concert
-    var aiNeuralIntensity: Int = 85       // 0% - 100%
+    var aiPresetMode: Int = 0
+    var aiNeuralIntensity: Int = 85
 
     // כיוון ידני משלים למנוע השירים
     var songRemasterEnabled: Boolean = true
@@ -75,7 +83,6 @@ object AudioEngine {
     var bootCooldownUntil: Long = 0L
     private var playbackCallbackRegistered = false
 
-    // 18 סגנונות המחוון (כולל 3 החדשים מהתמונות: 15, 16, 17)
     val styleNames = listOf(
         "0. מחוון המערכת המקורי של המכשיר (Native SystemUI)",
         "1. עיצוב הזכוכית היוקרתי (Glassmorphism)",
@@ -98,10 +105,111 @@ object AudioEngine {
     )
 
     fun getEffectiveMaxVolume(): Int {
+        // ערוצי מערכת (צלצול, התראות, שעון, שיחה) פועלים בטווח 0%-100%, בעוד שמדיה תומכת עד 200%/300%
+        if (activeStreamType != 0) return 100
         return when {
             sliderOnlyNoBoostMode || !isBoosterActive -> 100
             allow300PercentBoost -> 300
             else -> 200
+        }
+    }
+
+    fun getAndroidStreamConstant(streamIndex: Int = activeStreamType): Int {
+        return when (streamIndex) {
+            1 -> AudioManager.STREAM_RING
+            2 -> AudioManager.STREAM_NOTIFICATION
+            3 -> AudioManager.STREAM_ALARM
+            4 -> AudioManager.STREAM_VOICE_CALL
+            else -> AudioManager.STREAM_MUSIC
+        }
+    }
+
+    fun getActiveStreamHebrewLabel(): String {
+        return when (activeStreamType) {
+            1 -> "עוצמת צלצול"
+            2 -> "התראות"
+            3 -> "שעון מעורר"
+            4 -> "שיחת טלפון"
+            else -> if (isBluetoothConnected) "מדיה (Bluetooth)" else "מדיה ומוזיקה"
+        }
+    }
+
+    fun getActiveStreamShortTitle(): String {
+        return when (activeStreamType) {
+            1 -> "RING VOL"
+            2 -> "NOTIFY"
+            3 -> "ALARM"
+            4 -> if (isBluetoothConnected) "BT CALL" else "CALL VOL"
+            else -> if (isBluetoothConnected) "BT AUDIO" else "VOLUME"
+        }
+    }
+
+    // בודק בזמן אמת האם מחובר התקן שמע Bluetooth ומזהה אם הטלפון בשיחה או בצלצול
+    fun refreshBluetoothAndStreamState(context: Context) {
+        val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+
+        // 1. בדיקת חיבור אוזניות / רמקול בלוטות'
+        var btFound = false
+        runCatching {
+            val devices = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            for (dev in devices) {
+                val t = dev.type
+                if (t == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                    t == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                    (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && (
+                        t == AudioDeviceInfo.TYPE_BLE_HEADSET ||
+                        t == AudioDeviceInfo.TYPE_BLE_SPEAKER ||
+                        t == AudioDeviceInfo.TYPE_BLE_BROADCAST
+                    ))
+                ) {
+                    btFound = true
+                    break
+                }
+            }
+        }
+        isBluetoothConnected = btFound
+
+        // 2. זיהוי אוטומטי של מצב שיחה או צלצול (אלא אם המשתמש החליף ערוץ ידנית ב-6 השניות האחרונות)
+        val now = SystemClock.elapsedRealtime()
+        if (now > manualStreamOverrideUntil) {
+            val autoStream = when (am.mode) {
+                AudioManager.MODE_RINGTONE -> 1
+                AudioManager.MODE_IN_CALL, AudioManager.MODE_IN_COMMUNICATION -> 4
+                else -> 0
+            }
+            if (autoStream != activeStreamType) {
+                activeStreamType = autoStream
+                syncCurrentVolumeFromActiveStream(am)
+            }
+        }
+    }
+
+    // מעבר ידני בין 5 ערוצי השמע בלחיצה על סמל הערוץ במחוון
+    fun cycleNextStream(context: Context) {
+        val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        if (activeStreamType == 0) {
+            savedMediaBoostVolume = currentTotalVolume
+        }
+        activeStreamType = (activeStreamType + 1) % 5
+        manualStreamOverrideUntil = SystemClock.elapsedRealtime() + 8000L
+        syncCurrentVolumeFromActiveStream(am)
+    }
+
+    fun syncCurrentVolumeFromActiveStream(am: AudioManager) {
+        if (activeStreamType == 0) {
+            val maxSys = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+            val curSys = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+            val sysPct = ((curSys.toFloat() / maxSys) * 100f).roundToInt()
+            currentTotalVolume = if (savedMediaBoostVolume > 100 && curSys >= maxSys && !sliderOnlyNoBoostMode) {
+                savedMediaBoostVolume.coerceAtMost(getEffectiveMaxVolume())
+            } else {
+                sysPct
+            }
+        } else {
+            val streamConst = getAndroidStreamConstant(activeStreamType)
+            val maxSys = am.getStreamMaxVolume(streamConst).coerceAtLeast(1)
+            val curSys = am.getStreamVolume(streamConst)
+            currentTotalVolume = ((curSys.toFloat() / maxSys) * 100f).roundToInt().coerceIn(0, 100)
         }
     }
 
@@ -121,8 +229,10 @@ object AudioEngine {
             songPunchLevel = prefs.getInt("song_punch", songPunchLevel)
 
             currentTotalVolume = prefs.getInt("saved_vol", currentTotalVolume).coerceIn(0, getEffectiveMaxVolume())
+            savedMediaBoostVolume = currentTotalVolume
             sliderStyleIndex = prefs.getInt("slider_style", sliderStyleIndex).coerceIn(0, styleNames.lastIndex)
             SliderThemeManager.loadAllStyleConfigs(it)
+            refreshBluetoothAndStreamState(it)
             registerAssistantSafeRecovery(it.applicationContext)
         }
         ensureAudioEffectsCreated()
@@ -171,6 +281,7 @@ object AudioEngine {
             am.registerAudioPlaybackCallback(object : AudioManager.AudioPlaybackCallback() {
                 override fun onPlaybackConfigChanged(configs: MutableList<AudioPlaybackConfiguration>?) {
                     super.onPlaybackConfigChanged(configs)
+                    refreshBluetoothAndStreamState(appContext)
                     if (!isBoosterActive || sliderOnlyNoBoostMode) {
                         runCatching { loudnessEnhancer?.setTargetGain(0) }
                         return
@@ -192,8 +303,8 @@ object AudioEngine {
             runCatching { loudnessEnhancer?.setTargetGain(0) }
             return
         }
-        val extra = (currentTotalVolume - 100).coerceAtLeast(0)
-        // מנוע ה-AI מוסיף פיצוי דינמי עדין (AI Loudness Compensation) גם בעוצמות נמוכות
+        val mediaVol = if (activeStreamType == 0) currentTotalVolume else savedMediaBoostVolume
+        val extra = (mediaVol - 100).coerceAtLeast(0)
         val aiSmartWarmthGain = if (aiSongEngineEnabled) ((aiNeuralIntensity / 100f) * 180).roundToInt() else 0
         val factor = if (antiClippingEnabled) 17 else 24
         val cleanGain = (extra * factor) + aiSmartWarmthGain
@@ -214,8 +325,6 @@ object AudioEngine {
             .edit().putInt("slider_style", sliderStyleIndex).apply()
     }
 
-    // מנוע ה-AI האוטונומי + DSP HD: מחשב בזמן אמת עקומת תדרים אידיאלית (Fletcher-Munson AI Curve)
-    // שמונעת עיוותים בווליום גבוה ומעשירה באס ופרטים בווליום בינוני/נמוך!
     fun updateSoundQualityDSP() {
         if (!isBoosterActive || sliderOnlyNoBoostMode) return
         val eq = equalizer ?: return
@@ -244,14 +353,11 @@ object AudioEngine {
                 lowBandGain += (songPunchLevel / 100f) * (maxEQ * 0.25f)
             }
 
-            // עיבוד מנוע ה-AI המוכן לשיפור שירים (AI Neural Mastering)
             if (aiSongEngineEnabled) {
                 val aiPower = (aiNeuralIntensity / 100f).coerceIn(0f, 1f)
-                // התאמה דינמית חכמה לפי עוצמת השמע הנוכחית למניעת צרידות ברמקול
                 val highVolProtection = if (currentTotalVolume > 140) 0.72f else 1.0f
 
                 when (aiPresetMode) {
-                    // 0: AI אוטומטי (איזון אולפני מלא: סאב הדוק, ניקוי עכירות, הבלטת שירה ותדרי אוויר)
                     0 -> {
                         lowBandGain += aiPower * (maxEQ * 0.42f) * highVolProtection
                         lowMidGain -= aiPower * (maxEQ * 0.18f)
@@ -261,9 +367,8 @@ object AudioEngine {
 
                         runCatching { bassBoost?.setStrength((aiPower * 680 * highVolProtection).toInt().toShort()) }
                         runCatching { virtualizer?.setStrength((aiPower * 720).toInt().toShort()) }
-                        runCatching { presetReverb?.preset = 1.toShort() } // חדר אקוסטי קטן ונקי
+                        runCatching { presetReverb?.preset = 1.toShort() }
                     }
-                    // 1: AI באס עמוק ופאנץ' (AI Ultra Bass & Sub)
                     1 -> {
                         lowBandGain += aiPower * (maxEQ * 0.62f) * highVolProtection
                         lowMidGain += aiPower * (maxEQ * 0.15f)
@@ -274,7 +379,6 @@ object AudioEngine {
                         runCatching { virtualizer?.setStrength((aiPower * 550).toInt().toShort()) }
                         runCatching { presetReverb?.preset = 0.toShort() }
                     }
-                    // 2: AI שירה קריסטל והפרדת כלים (AI Crystal Vocal HD)
                     2 -> {
                         lowBandGain += aiPower * (maxEQ * 0.20f)
                         lowMidGain -= aiPower * (maxEQ * 0.26f)
@@ -286,7 +390,6 @@ object AudioEngine {
                         runCatching { virtualizer?.setStrength((aiPower * 680).toInt().toShort()) }
                         runCatching { presetReverb?.preset = 1.toShort() }
                     }
-                    // 3: AI הופעה חיה ובמה תלת-ממדית (AI 3D Concert Live)
                     else -> {
                         lowBandGain += aiPower * (maxEQ * 0.45f) * highVolProtection
                         centerMidGain += aiPower * (maxEQ * 0.20f)
@@ -295,7 +398,7 @@ object AudioEngine {
 
                         runCatching { bassBoost?.setStrength((aiPower * 740 * highVolProtection).toInt().toShort()) }
                         runCatching { virtualizer?.setStrength((aiPower * 980).toInt().toShort()) }
-                        runCatching { presetReverb?.preset = 4.toShort() } // אולם הופעות
+                        runCatching { presetReverb?.preset = 4.toShort() }
                     }
                 }
             }
@@ -335,17 +438,27 @@ object AudioEngine {
         val maxAllowed = getEffectiveMaxVolume()
         currentTotalVolume = totalPercent.coerceIn(0, maxAllowed)
 
-        context.getSharedPreferences("sound_booster_hd", Context.MODE_PRIVATE)
-            .edit().putInt("saved_vol", currentTotalVolume).apply()
-
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
-        val maxSysVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
-
         val allowUI = showNativeSystemUI && (SystemClock.elapsedRealtime() > bootCooldownUntil)
         val flags = if (allowUI) AudioManager.FLAG_SHOW_UI else 0
 
         isInternalVolumeChange = true
         try {
+            // אם המשתמש מתאים כרגע ערוץ צלצול / התראות / שעון מעורר / שיחה:
+            if (activeStreamType != 0) {
+                val targetStream = getAndroidStreamConstant(activeStreamType)
+                val maxStreamVol = audioManager.getStreamMaxVolume(targetStream).coerceAtLeast(1)
+                val sysTarget = ((currentTotalVolume.coerceIn(0, 100) / 100f) * maxStreamVol).roundToInt()
+                runCatching { audioManager.setStreamVolume(targetStream, sysTarget, flags) }
+                return
+            }
+
+            // ערוץ מדיה ומוזיקה (0% עד 100%/200%/300%)
+            savedMediaBoostVolume = currentTotalVolume
+            context.getSharedPreferences("sound_booster_hd", Context.MODE_PRIVATE)
+                .edit().putInt("saved_vol", currentTotalVolume).apply()
+
+            val maxSysVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
             if (currentTotalVolume <= 100 || sliderOnlyNoBoostMode || !isBoosterActive) {
                 val safePct = currentTotalVolume.coerceIn(0, 100)
                 val sysTarget = ((safePct / 100f) * maxSysVol).roundToInt()
@@ -409,7 +522,7 @@ class MainActivity : AppCompatActivity() {
         AudioEngine.init(this)
 
         val curSys = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-        if (AudioEngine.currentTotalVolume <= 100) {
+        if (AudioEngine.currentTotalVolume <= 100 && AudioEngine.activeStreamType == 0) {
             AudioEngine.currentTotalVolume = ((curSys.toFloat() / maxSystemVolume) * 100).roundToInt()
         }
 
@@ -420,6 +533,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        AudioEngine.refreshBluetoothAndStreamState(this)
         updateServiceButtonState()
         updateEditButtonState(VolumeOverlayService.instance?.isEditModeActive() == true)
         syncVolumeRangeUI()
@@ -490,13 +604,15 @@ class MainActivity : AppCompatActivity() {
         seekTotalVolume.max = maxAllowed
         progressTotalVolume.max = maxAllowed
 
+        val streamLabel = AudioEngine.getActiveStreamHebrewLabel()
         tvVolumeCardTitle.text = when {
+            AudioEngine.activeStreamType != 0 -> "ערוץ פעיל: $streamLabel (0% - 100%)"
             AudioEngine.sliderOnlyNoBoostMode -> "עוצמת שמע (0% - 100% | מצב מחוון בלבד)"
-            AudioEngine.allow300PercentBoost -> "עוצמת שמע טורבו (0% - 300%)"
-            else -> "עוצמת שמע ראשית (0% - 200%)"
+            AudioEngine.allow300PercentBoost -> "עוצמת $streamLabel (0% - 300%)"
+            else -> "עוצמת $streamLabel (0% - 200%)"
         }
 
-        btnVol300.visibility = if (AudioEngine.allow300PercentBoost && !AudioEngine.sliderOnlyNoBoostMode) {
+        btnVol300.visibility = if (AudioEngine.allow300PercentBoost && !AudioEngine.sliderOnlyNoBoostMode && AudioEngine.activeStreamType == 0) {
             View.VISIBLE
         } else {
             View.GONE
@@ -527,7 +643,6 @@ class MainActivity : AppCompatActivity() {
         val switchAllow300 = findViewById<SwitchCompat>(R.id.switchAllow300Boost)
         val switchSliderOnly = findViewById<SwitchCompat>(R.id.switchSliderOnlyMode)
 
-        // בקרי מנוע ה-AI המוכן לשיפור שירים
         val switchAiEngine = findViewById<SwitchCompat>(R.id.switchAiSongEngine)
         val tvAiSubStatus = findViewById<TextView>(R.id.tvAiEngineSubStatus)
         val btnAiAuto = findViewById<MaterialButton>(R.id.btnAiModeAuto)
@@ -562,37 +677,45 @@ class MainActivity : AppCompatActivity() {
 
         val eqContainer = findViewById<LinearLayout>(R.id.eqContainer)
 
+        // לחיצה על כותרת כרטיס הווליום מאפשרת להחליף בין ערוצי השמע (מדיה/צלצול/התראות/שעון/טלפון) גם מתוך האפליקציה!
+        tvVolumeCardTitle.setOnClickListener {
+            AudioEngine.cycleNextStream(this)
+            syncVolumeRangeUI()
+            VolumeOverlayService.instance?.refreshOverlayLive(updateLayout = false)
+            Toast.makeText(this, "ערוץ נבחר: ${AudioEngine.getActiveStreamHebrewLabel()} (לחץ שוב להחלפה)", Toast.LENGTH_SHORT).show()
+        }
+
         btnEnableSystemSlider.setOnClickListener {
             Toast.makeText(this, "הפעל את 'Sound Booster מחוון ווליום 200%'", Toast.LENGTH_LONG).show()
             runCatching { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
         }
 
         fun refreshHeaderStatusText() {
+            val btStatus = if (AudioEngine.isBluetoothConnected) " | BT מחובר" else ""
             when {
                 !AudioEngine.isBoosterActive -> {
-                    tvStatus.text = "מנוע סאונד ומחוון כבויים ●"
+                    tvStatus.text = "מנוע סאונד ומחוון כבויים ●$btStatus"
                     tvStatus.setTextColor(Color.parseColor("#FF5252"))
                     cardHeader.strokeColor = Color.parseColor("#263042")
                 }
                 AudioEngine.sliderOnlyNoBoostMode -> {
-                    tvStatus.text = "מצב עיצוב מחוון בלבד פעיל ● ללא הגברת סאונד"
+                    tvStatus.text = "מצב עיצוב מחוון בלבד פעיל ● ללא הגברת סאונד$btStatus"
                     tvStatus.setTextColor(Color.parseColor("#00E5FF"))
                     cardHeader.strokeColor = Color.parseColor("#00E5FF")
                 }
                 AudioEngine.aiSongEngineEnabled -> {
-                    tvStatus.text = "מנוע AI Neural Mastering פעיל ● שדרוג שירים חי"
+                    tvStatus.text = "מנוע AI Neural Mastering פעיל ● שדרוג שירים חי$btStatus"
                     tvStatus.setTextColor(Color.parseColor("#00E676"))
                     cardHeader.strokeColor = Color.parseColor("#00E676")
                 }
                 else -> {
-                    tvStatus.text = "מנוע DSP HD פעיל ● מוגן מהתנגשויות שמע"
+                    tvStatus.text = "מנוע DSP HD פעיל ● מוגן מהתנגשויות שמע$btStatus"
                     tvStatus.setTextColor(Color.parseColor("#00E5FF"))
                     cardHeader.strokeColor = Color.parseColor("#00E5FF")
                 }
             }
         }
 
-        // חיבור מנוע ה-AI לשיפור שירים
         fun updateAiButtonsUI() {
             val modeNames = listOf(
                 "AI Auto-Master: איזון אולפני אוטומטי לכל שיר",
@@ -686,14 +809,17 @@ class MainActivity : AppCompatActivity() {
                     AudioEngine.applyVolume(this@MainActivity, progress, showNativeSystemUI = false)
                 }
 
-                if (AudioEngine.sliderOnlyNoBoostMode) {
+                val curStreamName = AudioEngine.getActiveStreamHebrewLabel()
+                if (AudioEngine.activeStreamType != 0) {
+                    tvSubBoostInfo.text = "ערוץ: $curStreamName ($progress%) | לחץ על סמל המחוון להחלפת ערוץ"
+                } else if (AudioEngine.sliderOnlyNoBoostMode) {
                     tvSubBoostInfo.text = "מערכת: $progress% | מצב עיצוב מחוון בלבד (ללא הגברה)"
                 } else if (progress <= 100) {
-                    tvSubBoostInfo.text = "מערכת: $progress% | מנוע AI + HD: מוכנים"
+                    tvSubBoostInfo.text = "ערוץ: $curStreamName | מנוע AI + HD: מוכנים"
                 } else {
                     val extraPercent = progress - 100
                     val db = String.format("%.1f", extraPercent * 0.17f)
-                    tvSubBoostInfo.text = "מערכת: 100% | הגברת AI HD נקייה: +$db dB"
+                    tvSubBoostInfo.text = "ערוץ: $curStreamName | הגברת AI HD נקייה: +$db dB"
                 }
 
                 val color = when {
@@ -720,6 +846,8 @@ class MainActivity : AppCompatActivity() {
             AudioEngine.applyVolume(this, 100, false)
         }
         findViewById<MaterialButton>(R.id.btnVol150).setOnClickListener {
+            AudioEngine.activeStreamType = 0
+            syncVolumeRangeUI()
             if (AudioEngine.sliderOnlyNoBoostMode) {
                 Toast.makeText(this, "כבה את 'מצב עיצוב מחוון בלבד' כדי להגביר מעל 100%", Toast.LENGTH_SHORT).show()
             } else {
@@ -728,6 +856,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
         findViewById<MaterialButton>(R.id.btnVol200).setOnClickListener {
+            AudioEngine.activeStreamType = 0
+            syncVolumeRangeUI()
             if (AudioEngine.sliderOnlyNoBoostMode) {
                 Toast.makeText(this, "כבה את 'מצב עיצוב מחוון בלבד' כדי להגביר מעל 100%", Toast.LENGTH_SHORT).show()
             } else {
@@ -736,6 +866,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
         btnVol300.setOnClickListener {
+            AudioEngine.activeStreamType = 0
+            syncVolumeRangeUI()
             if (!AudioEngine.sliderOnlyNoBoostMode && AudioEngine.allow300PercentBoost) {
                 seekTotalVolume.progress = 300
                 AudioEngine.applyVolume(this, 300, false)
@@ -918,7 +1050,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     // =========================================================================
-    // קטגוריה 5: התאמה דינמית ל-18 המחוונים (כולל 3 החדשים מהתמונות)
+    // קטגוריה 5: התאמה דינמית ל-18 המחוונים
     // =========================================================================
     private fun setupSliderDesignCategory() {
         val stylesContainer = findViewById<LinearLayout>(R.id.stylesGridContainer)
@@ -1409,6 +1541,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (VolumeOverlayService.instance == null) {
+            AudioEngine.refreshBluetoothAndStreamState(this)
             val maxAllowed = AudioEngine.getEffectiveMaxVolume()
             when (keyCode) {
                 KeyEvent.KEYCODE_VOLUME_UP -> {
@@ -1447,7 +1580,7 @@ class MainActivity : AppCompatActivity() {
 }
 
 // =========================================================================
-// 3. שירות המחוון הצף
+// 3. שירות המחוון הצף (מזהה אוטומטית חיבור בלוטות' וערוץ פעיל ומציג את הסמלים התואמים!)
 // =========================================================================
 class VolumeOverlayService : AccessibilityService() {
 
@@ -1582,23 +1715,35 @@ class VolumeOverlayService : AccessibilityService() {
 
     private fun stepVolumeInDirection(direction: Int, stepAmount: Int) {
         val am = audioManager ?: return
-        val curSys = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+        // רענון חיבור בלוטות' וזיהוי שיחה/צלצול לפני שינוי העוצמה
+        AudioEngine.refreshBluetoothAndStreamState(this)
+
         val useNativeSystemUI = (AudioEngine.sliderStyleIndex == 0)
         val maxAllowed = AudioEngine.getEffectiveMaxVolume()
 
-        if (direction > 0) {
-            if (curSys < maxSysVol && AudioEngine.currentTotalVolume < 100) {
-                val nextVol = (AudioEngine.currentTotalVolume + stepAmount).coerceAtMost(100)
-                AudioEngine.currentTotalVolume = nextVol
+        if (AudioEngine.activeStreamType != 0) {
+            // התאמת ערוץ צלצול / התראות / שעון / שיחת טלפון (0% - 100%)
+            AudioEngine.currentTotalVolume = if (direction > 0) {
+                (AudioEngine.currentTotalVolume + stepAmount).coerceAtMost(100)
             } else {
-                val baseVol = if (AudioEngine.currentTotalVolume < 100) 100 else AudioEngine.currentTotalVolume
-                AudioEngine.currentTotalVolume = (baseVol + stepAmount).coerceAtMost(maxAllowed)
+                (AudioEngine.currentTotalVolume - stepAmount).coerceAtLeast(0)
             }
         } else {
-            if (AudioEngine.currentTotalVolume > 100) {
-                AudioEngine.currentTotalVolume = (AudioEngine.currentTotalVolume - stepAmount).coerceAtLeast(100)
+            val curSys = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+            if (direction > 0) {
+                if (curSys < maxSysVol && AudioEngine.currentTotalVolume < 100) {
+                    val nextVol = (AudioEngine.currentTotalVolume + stepAmount).coerceAtMost(100)
+                    AudioEngine.currentTotalVolume = nextVol
+                } else {
+                    val baseVol = if (AudioEngine.currentTotalVolume < 100) 100 else AudioEngine.currentTotalVolume
+                    AudioEngine.currentTotalVolume = (baseVol + stepAmount).coerceAtMost(maxAllowed)
+                }
             } else {
-                AudioEngine.currentTotalVolume = (AudioEngine.currentTotalVolume - stepAmount).coerceAtLeast(0)
+                if (AudioEngine.currentTotalVolume > 100) {
+                    AudioEngine.currentTotalVolume = (AudioEngine.currentTotalVolume - stepAmount).coerceAtLeast(100)
+                } else {
+                    AudioEngine.currentTotalVolume = (AudioEngine.currentTotalVolume - stepAmount).coerceAtLeast(0)
+                }
             }
         }
 
@@ -1646,6 +1791,7 @@ class VolumeOverlayService : AccessibilityService() {
 
     fun triggerPreviewOverlay() {
         hideHandler.removeCallbacks(hideRunnable)
+        AudioEngine.refreshBluetoothAndStreamState(this)
         if (AudioEngine.sliderStyleIndex == 0) {
             removeCustomOverlay()
             AudioEngine.applyVolume(this, AudioEngine.currentTotalVolume, showNativeSystemUI = true)
@@ -1847,6 +1993,7 @@ class VolumeOverlayService : AccessibilityService() {
 
         val padH = dp(10f + (cfg.extraParam1 / 100f) * 12f)
         val padV = dp(6f + (cfg.extraParam1 / 100f) * 6f)
+        val btMark = if (AudioEngine.isBluetoothConnected) " ᛒ" else ""
         badgeView?.apply {
             setPadding(padH, padV, padH, padV)
             textSize = cfg.textSizeSp.toFloat()
@@ -1856,7 +2003,7 @@ class VolumeOverlayService : AccessibilityService() {
                 setStroke(dp(cfg.borderWidthDp.toFloat()), cfg.colors[1])
             }
             setTextColor(cfg.colors[2])
-            text = "${AudioEngine.currentTotalVolume}% HD"
+            text = "${AudioEngine.currentTotalVolume}% HD$btMark"
         }
         hideHandler.postDelayed(hideRunnable, 2800)
     }
