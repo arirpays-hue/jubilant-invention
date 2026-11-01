@@ -1,6 +1,8 @@
 package com.example.soundbooster
 
 import android.accessibilityservice.AccessibilityService
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
@@ -24,6 +26,7 @@ import android.provider.Settings
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
@@ -40,7 +43,7 @@ import com.google.android.material.card.MaterialCardView
 import kotlin.math.roundToInt
 
 // =========================================================================
-// 1. מנוע סאונד + מנוע AI לשיפור שירים + ניהול 5 ערוצי שמע וזיהוי בלוטות' חי
+// 1. מנוע סאונד + מנוע AI לשיפור שירים + חסימת לופ מחוון המערכת + זיהוי בלוטות'
 // =========================================================================
 object AudioEngine {
     var loudnessEnhancer: LoudnessEnhancer? = null
@@ -55,7 +58,6 @@ object AudioEngine {
     var sliderOnlyNoBoostMode: Boolean = false
     var allow300PercentBoost: Boolean = false
 
-    // ניהול ערוץ שמע נוכחי וחיבור בלוטות' עבור סמלי המחוון
     // 0 = מדיה, 1 = עוצמת צלצול, 2 = התראות, 3 = שעון מעורר, 4 = שיחת טלפון
     var activeStreamType: Int = 0
     var isBluetoothConnected: Boolean = false
@@ -79,7 +81,9 @@ object AudioEngine {
 
     var sliderStyleIndex: Int = 1
 
+    // חותמות זמן למניעת קפיצת מחוון המערכת ולופים בזמן שינוי עוצמה או החלפת מחוון
     @Volatile var isInternalVolumeChange: Boolean = false
+    @Volatile var suppressSystemUILoopUntil: Long = 0L
     var bootCooldownUntil: Long = 0L
     private var playbackCallbackRegistered = false
 
@@ -105,7 +109,6 @@ object AudioEngine {
     )
 
     fun getEffectiveMaxVolume(): Int {
-        // ערוצי מערכת (צלצול, התראות, שעון, שיחה) פועלים בטווח 0%-100%, בעוד שמדיה תומכת עד 200%/300%
         if (activeStreamType != 0) return 100
         return when {
             sliderOnlyNoBoostMode || !isBoosterActive -> 100
@@ -144,11 +147,9 @@ object AudioEngine {
         }
     }
 
-    // בודק בזמן אמת האם מחובר התקן שמע Bluetooth ומזהה אם הטלפון בשיחה או בצלצול
     fun refreshBluetoothAndStreamState(context: Context) {
         val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
 
-        // 1. בדיקת חיבור אוזניות / רמקול בלוטות'
         var btFound = false
         runCatching {
             val devices = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
@@ -169,7 +170,6 @@ object AudioEngine {
         }
         isBluetoothConnected = btFound
 
-        // 2. זיהוי אוטומטי של מצב שיחה או צלצול (אלא אם המשתמש החליף ערוץ ידנית ב-6 השניות האחרונות)
         val now = SystemClock.elapsedRealtime()
         if (now > manualStreamOverrideUntil) {
             val autoStream = when (am.mode) {
@@ -184,7 +184,6 @@ object AudioEngine {
         }
     }
 
-    // מעבר ידני בין 5 ערוצי השמע בלחיצה על סמל הערוץ במחוון
     fun cycleNextStream(context: Context) {
         val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
         if (activeStreamType == 0) {
@@ -321,6 +320,7 @@ object AudioEngine {
     }
 
     fun saveSelectedStyleIndex(context: Context) {
+        suppressSystemUILoopUntil = SystemClock.elapsedRealtime() + 800L
         context.getSharedPreferences("sound_booster_hd", Context.MODE_PRIVATE)
             .edit().putInt("slider_style", sliderStyleIndex).apply()
     }
@@ -433,36 +433,47 @@ object AudioEngine {
         runCatching { presetReverb?.enabled = effectsShouldRun }
     }
 
+    // חוסם הרמטית כל קפיצה של מחוון המערכת כשנבחר סגנון מותאם אישית (1..17) ומונע לופ!
     fun applyVolume(context: Context, totalPercent: Int, showNativeSystemUI: Boolean = false) {
         ensureAudioEffectsCreated()
         val maxAllowed = getEffectiveMaxVolume()
         currentTotalVolume = totalPercent.coerceIn(0, maxAllowed)
 
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
-        val allowUI = showNativeSystemUI && (SystemClock.elapsedRealtime() > bootCooldownUntil)
+
+        // מחוון המערכת המקורי מורשה לקפוץ *אך ורק* אם המשתמש בחר בסגנון 0 (מחוון המערכת המקורי)
+        val now = SystemClock.elapsedRealtime()
+        val isCustomOverlaySelected = (sliderStyleIndex != 0 && VolumeOverlayService.instance != null)
+        val allowUI = showNativeSystemUI && !isCustomOverlaySelected && (now > bootCooldownUntil) && (now > suppressSystemUILoopUntil)
         val flags = if (allowUI) AudioManager.FLAG_SHOW_UI else 0
 
         isInternalVolumeChange = true
+        suppressSystemUILoopUntil = now + 350L
         try {
-            // אם המשתמש מתאים כרגע ערוץ צלצול / התראות / שעון מעורר / שיחה:
             if (activeStreamType != 0) {
                 val targetStream = getAndroidStreamConstant(activeStreamType)
                 val maxStreamVol = audioManager.getStreamMaxVolume(targetStream).coerceAtLeast(1)
                 val sysTarget = ((currentTotalVolume.coerceIn(0, 100) / 100f) * maxStreamVol).roundToInt()
-                runCatching { audioManager.setStreamVolume(targetStream, sysTarget, flags) }
+                val curStreamVol = audioManager.getStreamVolume(targetStream)
+                if (curStreamVol != sysTarget || allowUI) {
+                    runCatching { audioManager.setStreamVolume(targetStream, sysTarget, flags) }
+                }
                 return
             }
 
-            // ערוץ מדיה ומוזיקה (0% עד 100%/200%/300%)
             savedMediaBoostVolume = currentTotalVolume
             context.getSharedPreferences("sound_booster_hd", Context.MODE_PRIVATE)
                 .edit().putInt("saved_vol", currentTotalVolume).apply()
 
             val maxSysVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+            val curSys = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+
             if (currentTotalVolume <= 100 || sliderOnlyNoBoostMode || !isBoosterActive) {
                 val safePct = currentTotalVolume.coerceIn(0, 100)
                 val sysTarget = ((safePct / 100f) * maxSysVol).roundToInt()
-                runCatching { audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, sysTarget, flags) }
+                if (curSys != sysTarget || allowUI) {
+                    runCatching { audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, sysTarget, flags) }
+                }
                 if (sliderOnlyNoBoostMode || !isBoosterActive) {
                     runCatching { loudnessEnhancer?.setTargetGain(0) }
                 } else {
@@ -470,7 +481,6 @@ object AudioEngine {
                     updateSoundQualityDSP()
                 }
             } else {
-                val curSys = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
                 if (curSys < maxSysVol || allowUI) {
                     runCatching { audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, maxSysVol, flags) }
                 }
@@ -480,7 +490,7 @@ object AudioEngine {
         } finally {
             Handler(Looper.getMainLooper()).postDelayed({
                 isInternalVolumeChange = false
-            }, 100)
+            }, 120)
         }
     }
 }
@@ -677,7 +687,6 @@ class MainActivity : AppCompatActivity() {
 
         val eqContainer = findViewById<LinearLayout>(R.id.eqContainer)
 
-        // לחיצה על כותרת כרטיס הווליום מאפשרת להחליף בין ערוצי השמע (מדיה/צלצול/התראות/שעון/טלפון) גם מתוך האפליקציה!
         tvVolumeCardTitle.setOnClickListener {
             AudioEngine.cycleNextStream(this)
             syncVolumeRangeUI()
@@ -1050,7 +1059,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     // =========================================================================
-    // קטגוריה 5: התאמה דינמית ל-18 המחוונים
+    // קטגוריה 5: התאמה דינמית ל-18 המחוונים + מתג סגירה בנגיעה מחוץ למחוון
     // =========================================================================
     private fun setupSliderDesignCategory() {
         val stylesContainer = findViewById<LinearLayout>(R.id.stylesGridContainer)
@@ -1100,6 +1109,8 @@ class MainActivity : AppCompatActivity() {
         val switchDim = findViewById<SwitchCompat>(R.id.switchDimScreen)
         val seekDimStrength = findViewById<SeekBar>(R.id.seekDimStrength)
         val tvDimStrengthVal = findViewById<TextView>(R.id.tvDimStrengthValue)
+
+        val switchDismissOutside = findViewById<SwitchCompat>(R.id.switchDismissOutside)
 
         btnToggleInteractiveEdit = findViewById(R.id.btnToggleInteractiveEdit)
         val seekWidth = findViewById<SeekBar>(R.id.seekSliderWidth)
@@ -1224,6 +1235,8 @@ class MainActivity : AppCompatActivity() {
             seekDimStrength.progress = cfg.dimStrengthPercent
             tvDimStrengthVal.text = "${cfg.dimStrengthPercent}%"
 
+            switchDismissOutside.isChecked = cfg.dismissOnOutsideTouch
+
             seekWidth.progress = cfg.widthDp
             tvWidthVal.text = "${cfg.widthDp} dp"
             seekHeight.progress = cfg.heightDp
@@ -1252,10 +1265,11 @@ class MainActivity : AppCompatActivity() {
                 ).apply { bottomMargin = 8 }
 
                 setOnClickListener {
+                    // החלפת מחוון חלקה ללא הפעלת מחוון המערכת באמצע (מונע תקיעות ולופים!)
                     AudioEngine.sliderStyleIndex = i
                     AudioEngine.saveSelectedStyleIndex(this@MainActivity)
                     syncUIFromCurrentStyleConfig()
-                    VolumeOverlayService.instance?.triggerPreviewOverlay()
+                    VolumeOverlayService.instance?.triggerPreviewOverlay(playEnterAnim = true)
                 }
             }
             styleButtons.add(btn)
@@ -1265,13 +1279,13 @@ class MainActivity : AppCompatActivity() {
         btnResetStyle.setOnClickListener {
             SliderThemeManager.resetStyleToDefault(this)
             syncUIFromCurrentStyleConfig()
-            VolumeOverlayService.instance?.triggerPreviewOverlay()
+            VolumeOverlayService.instance?.triggerPreviewOverlay(playEnterAnim = true)
             Toast.makeText(this, "הגדרות המחוון הנוכחי אופסו לברירת המחדל", Toast.LENGTH_SHORT).show()
         }
 
         btnTestOverlay.setOnClickListener {
             if (VolumeOverlayService.instance != null) {
-                VolumeOverlayService.instance?.triggerPreviewOverlay()
+                VolumeOverlayService.instance?.triggerPreviewOverlay(playEnterAnim = true)
             } else {
                 Toast.makeText(this, "הפעל תחילה את שירות המחוון בהגדרות הנגישות", Toast.LENGTH_SHORT).show()
             }
@@ -1456,6 +1470,13 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(s: SeekBar?) {}
         })
 
+        switchDismissOutside.setOnCheckedChangeListener { _, isChecked ->
+            if (isUpdatingControlsProgrammatically) return@setOnCheckedChangeListener
+            SliderThemeManager.getCurrentConfig().dismissOnOutsideTouch = isChecked
+            SliderThemeManager.saveStyleConfig(this)
+            VolumeOverlayService.instance?.refreshOverlayLive(updateLayout = true)
+        }
+
         btnToggleInteractiveEdit.setOnClickListener {
             val svc = VolumeOverlayService.instance
             if (svc == null) {
@@ -1580,7 +1601,7 @@ class MainActivity : AppCompatActivity() {
 }
 
 // =========================================================================
-// 3. שירות המחוון הצף (מזהה אוטומטית חיבור בלוטות' וערוץ פעיל ומציג את הסמלים התואמים!)
+// 3. שירות המחוון הצף: טשטוש מסך בסגנון זכוכית כהה חלבית + סגירה בנגיעה בחוץ + אנימציות
 // =========================================================================
 class VolumeOverlayService : AccessibilityService() {
 
@@ -1596,6 +1617,7 @@ class VolumeOverlayService : AccessibilityService() {
     private var badgeView: TextView? = null
     private var customOverlayCanvasView: CustomThemedSliderOverlayView? = null
     private var overlayParams: WindowManager.LayoutParams? = null
+    private var lastAnimatedStyleIndex: Int = -1
 
     private var isInteractiveEditActive = false
     private var onLivePositionChangedCallback: ((Int, Int) -> Unit)? = null
@@ -1604,7 +1626,7 @@ class VolumeOverlayService : AccessibilityService() {
     private val hideHandler = Handler(Looper.getMainLooper())
     private val hideRunnable = Runnable {
         if (!isInteractiveEditActive) {
-            removeAllOverlays()
+            dismissOverlaysAnimated()
         }
     }
 
@@ -1619,14 +1641,14 @@ class VolumeOverlayService : AccessibilityService() {
         if (comboShortcutDetected || activeHoldDirection == 0) return@Runnable
         pendingSingleStepApplied = true
         stepVolumeInDirection(activeHoldDirection, stepAmount = 6)
-        volumeKeyHandler.postDelayed(holdRepeatRunnable, 240L)
+        volumeKeyHandler.postDelayed(holdRepeatRunnable, 220L)
     }
 
     private val holdRepeatRunnable = object : Runnable {
         override fun run() {
             if (comboShortcutDetected || activeHoldDirection == 0) return
             stepVolumeInDirection(activeHoldDirection, stepAmount = 5)
-            volumeKeyHandler.postDelayed(this, 95L)
+            volumeKeyHandler.postDelayed(this, 90L)
         }
     }
 
@@ -1647,8 +1669,7 @@ class VolumeOverlayService : AccessibilityService() {
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
         if (!AudioEngine.isBoosterActive && !AudioEngine.sliderOnlyNoBoostMode) return super.onKeyEvent(event)
-        if (AudioEngine.isInternalVolumeChange) return false
-
+        // בולע מיד את אירועי כפתורי הווליום כדי שמחוון המערכת של הטלפון לעולם לא יקפוץ לפנינו!
         val keyCode = event.keyCode
 
         if (keyCode != KeyEvent.KEYCODE_VOLUME_UP && keyCode != KeyEvent.KEYCODE_VOLUME_DOWN) {
@@ -1657,6 +1678,8 @@ class VolumeOverlayService : AccessibilityService() {
             }
             return super.onKeyEvent(event)
         }
+
+        if (AudioEngine.isInternalVolumeChange) return true
 
         if (isInteractiveEditActive) {
             if (event.action == KeyEvent.ACTION_DOWN) {
@@ -1681,7 +1704,7 @@ class VolumeOverlayService : AccessibilityService() {
                     activeHoldDirection = if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) 1 else -1
                     volumeKeyHandler.removeCallbacks(delayedInitialStepRunnable)
                     volumeKeyHandler.removeCallbacks(holdRepeatRunnable)
-                    volumeKeyHandler.postDelayed(delayedInitialStepRunnable, 140L)
+                    volumeKeyHandler.postDelayed(delayedInitialStepRunnable, 120L)
                 }
                 return true
             }
@@ -1703,7 +1726,7 @@ class VolumeOverlayService : AccessibilityService() {
                 return true
             }
         }
-        return super.onKeyEvent(event)
+        return true
     }
 
     private fun cancelVolumeHoldForSystemShortcut() {
@@ -1715,14 +1738,12 @@ class VolumeOverlayService : AccessibilityService() {
 
     private fun stepVolumeInDirection(direction: Int, stepAmount: Int) {
         val am = audioManager ?: return
-        // רענון חיבור בלוטות' וזיהוי שיחה/צלצול לפני שינוי העוצמה
         AudioEngine.refreshBluetoothAndStreamState(this)
 
         val useNativeSystemUI = (AudioEngine.sliderStyleIndex == 0)
         val maxAllowed = AudioEngine.getEffectiveMaxVolume()
 
         if (AudioEngine.activeStreamType != 0) {
-            // התאמת ערוץ צלצול / התראות / שעון / שיחת טלפון (0% - 100%)
             AudioEngine.currentTotalVolume = if (direction > 0) {
                 (AudioEngine.currentTotalVolume + stepAmount).coerceAtMost(100)
             } else {
@@ -1749,11 +1770,11 @@ class VolumeOverlayService : AccessibilityService() {
 
         AudioEngine.applyVolume(this, AudioEngine.currentTotalVolume, showNativeSystemUI = useNativeSystemUI)
         if (useNativeSystemUI) {
-            removeCustomOverlay()
+            removeCustomOverlayImmediate()
             showNativeBadgeIfNeeded()
         } else {
             removeBadge()
-            showCustomThemedOverlay()
+            showCustomThemedOverlay(playEnterAnim = false)
         }
     }
 
@@ -1773,7 +1794,7 @@ class VolumeOverlayService : AccessibilityService() {
                 AudioEngine.sliderStyleIndex = 1
             }
             removeBadge()
-            showCustomThemedOverlay()
+            showCustomThemedOverlay(playEnterAnim = true)
             customOverlayCanvasView?.isEditPositionMode = true
             customOverlayCanvasView?.invalidate()
         }
@@ -1789,32 +1810,33 @@ class VolumeOverlayService : AccessibilityService() {
         hideHandler.postDelayed(hideRunnable, 1200)
     }
 
-    fun triggerPreviewOverlay() {
+    fun triggerPreviewOverlay(playEnterAnim: Boolean = true) {
         hideHandler.removeCallbacks(hideRunnable)
+        AudioEngine.suppressSystemUILoopUntil = SystemClock.elapsedRealtime() + 800L
         AudioEngine.refreshBluetoothAndStreamState(this)
         if (AudioEngine.sliderStyleIndex == 0) {
-            removeCustomOverlay()
+            removeCustomOverlayImmediate()
             AudioEngine.applyVolume(this, AudioEngine.currentTotalVolume, showNativeSystemUI = true)
             showNativeBadgeIfNeeded()
         } else {
             removeBadge()
-            showCustomThemedOverlay()
+            showCustomThemedOverlay(playEnterAnim = playEnterAnim)
         }
     }
 
     fun refreshOverlayLive(updateLayout: Boolean = false) {
         if (customOverlayCanvasView == null) {
-            if (updateLayout) triggerPreviewOverlay()
+            if (updateLayout) triggerPreviewOverlay(playEnterAnim = true)
             return
         }
         if (updateLayout) {
             val wm = windowManager ?: return
-            updateTouchThroughBackdrop()
+            updateFrostedGlassBackdrop(animateIn = false)
             val params = buildSliderWindowLayoutParams()
             overlayParams = params
             runCatching { wm.updateViewLayout(customOverlayCanvasView, params) }
         } else {
-            updateTouchThroughBackdrop()
+            updateFrostedGlassBackdrop(animateIn = false)
         }
         customOverlayCanvasView?.invalidate()
         if (!isInteractiveEditActive) {
@@ -1827,22 +1849,29 @@ class VolumeOverlayService : AccessibilityService() {
         return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, resources.displayMetrics).roundToInt()
     }
 
-    private fun updateTouchThroughBackdrop() {
+    // =====================================================================
+    // שכבת טשטוש זכוכית חלבית כהה ברקע (כמו בתמונה של האולר השווייצרי Pro fx-991)
+    // =====================================================================
+    private fun updateFrostedGlassBackdrop(animateIn: Boolean) {
         val wm = windowManager ?: return
         val cfg = SliderThemeManager.getCurrentConfig()
         val needsBackdrop = (cfg.dimBackgroundEnabled && cfg.dimStrengthPercent > 0) ||
                             (cfg.blurBackgroundEnabled && cfg.blurStrengthPercent > 0)
 
         if (!needsBackdrop) {
-            removeBackdrop()
+            removeBackdropImmediate()
             return
         }
 
-        val dimAlpha = if (cfg.dimBackgroundEnabled) {
-            ((cfg.dimStrengthPercent / 100f) * 200).roundToInt().coerceIn(0, 210)
-        } else {
-            0
-        }
+        // חישוב גוון הזכוכית הכהה העמוקה ברקע (כמו בתמונה) לפי עוצמת הטשטוש וההשחרה
+        val blurTintAlpha = if (cfg.blurBackgroundEnabled) {
+            ((cfg.blurStrengthPercent / 100f) * 145).roundToInt()
+        } else 0
+        val dimTintAlpha = if (cfg.dimBackgroundEnabled) {
+            ((cfg.dimStrengthPercent / 100f) * 195).roundToInt()
+        } else 0
+        val combinedAlpha = maxOf(blurTintAlpha, dimTintAlpha).coerceIn(0, 225)
+        val frostedDarkColor = Color.argb(combinedAlpha, 14, 18, 28)
 
         var flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
@@ -1861,7 +1890,8 @@ class VolumeOverlayService : AccessibilityService() {
         ).apply {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 blurBehindRadius = if (cfg.blurBackgroundEnabled) {
-                    ((cfg.blurStrengthPercent / 100f) * 80).roundToInt()
+                    // רדיוס טשטוש עמוק וחלבי (עד 110px) שנראה בדיוק כמו בתמונה!
+                    ((cfg.blurStrengthPercent / 100f) * 110).roundToInt().coerceAtLeast(1)
                 } else {
                     0
                 }
@@ -1870,11 +1900,19 @@ class VolumeOverlayService : AccessibilityService() {
 
         if (backdropTouchThroughView == null) {
             backdropTouchThroughView = View(this).apply {
-                setBackgroundColor(Color.argb(dimAlpha, 0, 0, 0))
+                setBackgroundColor(frostedDarkColor)
+                if (animateIn) {
+                    alpha = 0f
+                    animate().alpha(1f).setDuration(240L).setListener(null).start()
+                } else {
+                    alpha = 1f
+                }
             }
             runCatching { wm.addView(backdropTouchThroughView, backdropParams) }
         } else {
-            backdropTouchThroughView?.setBackgroundColor(Color.argb(dimAlpha, 0, 0, 0))
+            backdropTouchThroughView?.animate()?.cancel()
+            backdropTouchThroughView?.alpha = 1f
+            backdropTouchThroughView?.setBackgroundColor(frostedDarkColor)
             runCatching { wm.updateViewLayout(backdropTouchThroughView, backdropParams) }
         }
     }
@@ -1888,8 +1926,10 @@ class VolumeOverlayService : AccessibilityService() {
         val viewW = dp(cfg.widthDp.toFloat()).coerceIn(dp(44f), screenW)
         val viewH = dp(cfg.heightDp.toFloat()).coerceIn(dp(40f), screenH)
 
+        // הוספת FLAG_WATCH_OUTSIDE_TOUCH כדי שנגיעה בכל מקום במסך מחוץ למחוון תזהה מיד ותעלים אותו באנימציה!
         val flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                    WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
 
         val maxOffsetX = (screenW - viewW).coerceAtLeast(1)
@@ -1908,11 +1948,15 @@ class VolumeOverlayService : AccessibilityService() {
         }
     }
 
-    private fun showCustomThemedOverlay() {
+    private fun showCustomThemedOverlay(playEnterAnim: Boolean = false) {
         hideHandler.removeCallbacks(hideRunnable)
         val wm = windowManager ?: return
 
-        updateTouchThroughBackdrop()
+        val isNewWindow = (customOverlayCanvasView == null)
+        val styleChanged = (lastAnimatedStyleIndex != AudioEngine.sliderStyleIndex)
+        lastAnimatedStyleIndex = AudioEngine.sliderStyleIndex
+
+        updateFrostedGlassBackdrop(animateIn = isNewWindow || playEnterAnim)
 
         if (customOverlayCanvasView == null) {
             customOverlayCanvasView = CustomThemedSliderOverlayView(
@@ -1944,6 +1988,10 @@ class VolumeOverlayService : AccessibilityService() {
                 },
                 onFinishEditClicked = {
                     closeInteractiveEditMode()
+                },
+                onOutsideTouchDismiss = {
+                    hideHandler.removeCallbacks(hideRunnable)
+                    dismissOverlaysAnimated()
                 }
             ).apply {
                 isEditPositionMode = isInteractiveEditActive
@@ -1951,12 +1999,52 @@ class VolumeOverlayService : AccessibilityService() {
 
             overlayParams = buildSliderWindowLayoutParams()
             runCatching { wm.addView(customOverlayCanvasView, overlayParams) }
+            customOverlayCanvasView?.playCustomEnterAnimation(AudioEngine.sliderStyleIndex)
         } else {
+            customOverlayCanvasView?.isAnimatingExit = false
             refreshOverlayLive(updateLayout = true)
+            if (playEnterAnim || styleChanged) {
+                customOverlayCanvasView?.playCustomEnterAnimation(AudioEngine.sliderStyleIndex)
+            } else {
+                customOverlayCanvasView?.animate()?.cancel()
+                customOverlayCanvasView?.alpha = 1f
+                customOverlayCanvasView?.translationX = 0f
+                customOverlayCanvasView?.translationY = 0f
+                customOverlayCanvasView?.scaleX = 1f
+                customOverlayCanvasView?.scaleY = 1f
+            }
         }
 
         if (!isInteractiveEditActive) {
             hideHandler.postDelayed(hideRunnable, 3400)
+        }
+    }
+
+    // =====================================================================
+    // מעלים באנימציה חלקה ומותאמת גם את המחוון וגם את טשטוש הרקע יחד!
+    // =====================================================================
+    fun dismissOverlaysAnimated() {
+        removeBadge()
+        val sliderView = customOverlayCanvasView
+        if (sliderView == null) {
+            removeBackdropImmediate()
+            return
+        }
+
+        backdropTouchThroughView?.let { bd ->
+            bd.animate()
+                .alpha(0f)
+                .setDuration(200L)
+                .setListener(object : AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: Animator) {
+                        removeBackdropImmediate()
+                    }
+                })
+                .start()
+        }
+
+        sliderView.playCustomExitAnimation(AudioEngine.sliderStyleIndex) {
+            removeCustomOverlayImmediate()
         }
     }
 
@@ -2008,8 +2096,9 @@ class VolumeOverlayService : AccessibilityService() {
         hideHandler.postDelayed(hideRunnable, 2800)
     }
 
-    private fun removeBackdrop() {
+    private fun removeBackdropImmediate() {
         backdropTouchThroughView?.let {
+            it.animate().cancel()
             runCatching { windowManager?.removeView(it) }
             backdropTouchThroughView = null
         }
@@ -2022,26 +2111,31 @@ class VolumeOverlayService : AccessibilityService() {
         }
     }
 
-    private fun removeCustomOverlay() {
+    private fun removeCustomOverlayImmediate() {
         customOverlayCanvasView?.let {
+            it.animate().cancel()
             runCatching { windowManager?.removeView(it) }
             customOverlayCanvasView = null
         }
-        removeBackdrop()
+        removeBackdropImmediate()
     }
 
-    private fun removeAllOverlays() {
+    private fun removeAllOverlaysImmediate() {
         removeBadge()
-        removeCustomOverlay()
+        removeCustomOverlayImmediate()
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        // מונע לחלוטין לופ מול SystemUI בזמן שהמחוון המותאם אישית פועל!
+        val now = SystemClock.elapsedRealtime()
+        if (now < AudioEngine.suppressSystemUILoopUntil || AudioEngine.isInternalVolumeChange) return
+
         val pkg = event?.packageName?.toString() ?: ""
         if (pkg.contains("systemui", ignoreCase = true) && (isVolUpPressed || isVolDownPressed)) {
             val cls = event?.className?.toString() ?: ""
             if (cls.contains("Screenshot", ignoreCase = true) || cls.contains("GlobalActions", ignoreCase = true)) {
                 cancelVolumeHoldForSystemShortcut()
-                removeAllOverlays()
+                removeAllOverlaysImmediate()
             }
         }
     }
@@ -2051,8 +2145,8 @@ class VolumeOverlayService : AccessibilityService() {
     override fun onDestroy() {
         super.onDestroy()
         volumeKeyHandler.removeCallbacksAndMessages(null)
-        removeAllOverlays()
+        hideHandler.removeCallbacksAndMessages(null)
+        removeAllOverlaysImmediate()
         instance = null
     }
 }
- 
