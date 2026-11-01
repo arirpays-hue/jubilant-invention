@@ -11,9 +11,15 @@ import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.SweepGradient
+import android.media.AudioManager
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.util.TypedValue
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.widget.Toast
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -24,7 +30,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 
 // =========================================================================
-// 1. מפרט ייעודי לכל אחד מ-15 סוגי המחוונים (0..14 המסודרים מחדש)
+// 1. מפרט ייעודי לכל אחד מ-18 סוגי המחוונים (0..14 הקיימים + 15..17 החדשים מהתמונות)
 // =========================================================================
 data class StyleCapabilities(
     val styleIndex: Int,
@@ -59,7 +65,7 @@ data class StyleConfig(
 
 object SliderThemeManager {
 
-    const val TOTAL_STYLES_COUNT = 15
+    const val TOTAL_STYLES_COUNT = 18
 
     val styleCapabilities = mapOf(
         0 to StyleCapabilities(
@@ -106,7 +112,6 @@ object SliderThemeManager {
             10, listOf("נוריות ירוקות (רגיל)", "נוריות צהובות (מוגבר)", "נוריות אדומות (שיא)", "נוריות כבויות", "רקע לוח מטריצה", "מסגרת וטקסט"),
             true, true, true, "מספר שורות נוריות LED", "מספר עמודות נוריות LED"
         ),
-        // --- 4 המחוונים הנוספים שמספורם סודר ל-11..14 ---
         11 to StyleCapabilities(
             11, listOf("קו מילוי וכפתור Play", "מסילה דקה אחורית", "רקע קפסולה לבנה/בהירה", "מסגרת קפסולה", "טקסט וחצים", "משולש Play פנימי"),
             true, true, true, "עובי קו המילוי הדק", "רוחב הקפסולה"
@@ -122,6 +127,19 @@ object SliderThemeManager {
         14 to StyleCapabilities(
             14, listOf("מילוי עליון", "מילוי תחתון", "רקע קפסולה", "מסגרת קפסולה", "עיגול ראש מודגש", "סמל וטקסט"),
             true, true, true, "רוחב קפסולה", null
+        ),
+        // --- 3 המחוונים החדשים מהתמונות (15, 16, 17) ---
+        15 to StyleCapabilities(
+            15, listOf("ניאון ציאן ראשי", "ניאון מג'נטה עליון", "רקע לוח HUD כהה", "מסגרת וסוגרי HUD", "טקסט VOLUME ואחוזים", "מסגרת ידית גרירה"),
+            true, true, false, "עובי צינור הניאון", "צפיפות שנתות טלמטריה"
+        ),
+        16 to StyleCapabilities(
+            16, listOf("הילת צינור ציאן", "ליבת קורל-כתום פנימית", "רקע זכוכית חלבית", "מסגרת זכוכית", "צבע סמלי רמקול/רטט/השתק", "בועית רמקול עליונה"),
+            true, true, true, "עובי צינור הניאון", "גודל בועית הרמקול"
+        ),
+        17 to StyleCapabilities(
+            17, listOf("צבע קשת 1 (צהוב)", "צבע קשת 2 (כתום)", "רקע זכוכית חלבית", "מסגרת זכוכית", "צבע קשת 3 (מג'נטה)", "צבע קשת 4 (כחול)"),
+            true, true, true, "רוחב קפסולת הקשת", "מהירות תנועת הצבעים"
         )
     )
 
@@ -170,7 +188,6 @@ object SliderThemeManager {
             intArrayOf(Color.parseColor("#00E676"), Color.parseColor("#FFD740"), Color.parseColor("#FF5252"), Color.parseColor("#222B38"), Color.parseColor("#10141D"), Color.parseColor("#FFFFFF")),
             94, true, 45, false, 20, 88, 290, 94, 50, 24, 2, 95, 12, 65, 50
         ),
-        // --- 11..14 המסודרים מחדש ---
         11 to StyleConfig(
             intArrayOf(Color.parseColor("#A91D22"), Color.parseColor("#F2C6C8"), Color.parseColor("#FFFFFF"), Color.parseColor("#E2E8F0"), Color.parseColor("#1E293B"), Color.parseColor("#FFFFFF")),
             96, true, 40, false, 10, 62, 285, 94, 48, 30, 1, 95, 11, 45, 75
@@ -186,6 +203,19 @@ object SliderThemeManager {
         14 to StyleConfig(
             intArrayOf(Color.parseColor("#F59E0B"), Color.parseColor("#D97706"), Color.parseColor("#27272A"), Color.parseColor("#52525B"), Color.parseColor("#FDE047"), Color.parseColor("#FFFFFF")),
             94, true, 45, false, 10, 70, 270, 94, 50, 34, 2, 95, 12, 65, 50
+        ),
+        // --- ברירות המחדל המדויקות ל-3 המחוונים החדשים מהתמונות ---
+        15 to StyleConfig(
+            intArrayOf(Color.parseColor("#00F0FF"), Color.parseColor("#FF00A0"), Color.parseColor("#080D1A"), Color.parseColor("#00E5FF"), Color.parseColor("#00F0FF"), Color.parseColor("#00FFFF")),
+            90, true, 60, false, 20, 148, 340, 12, 48, 16, 1, 100, 12, 50, 55
+        ),
+        16 to StyleConfig(
+            intArrayOf(Color.parseColor("#2AF5D2"), Color.parseColor("#FF7B54"), Color.parseColor("#F2ECF4"), Color.parseColor("#FFFFFF"), Color.parseColor("#1E1B18"), Color.parseColor("#4CE0D2")),
+            78, true, 80, false, 10, 108, 305, 92, 50, 28, 1, 100, 12, 45, 50
+        ),
+        17 to StyleConfig(
+            intArrayOf(Color.parseColor("#FFE600"), Color.parseColor("#FF5E00"), Color.parseColor("#F0F4F8"), Color.parseColor("#FFFFFF"), Color.parseColor("#FF007F"), Color.parseColor("#0051FF")),
+            80, true, 85, false, 10, 114, 310, 92, 50, 28, 1, 100, 12, 60, 55
         )
     )
 
@@ -208,7 +238,7 @@ object SliderThemeManager {
     }
 
     fun loadAllStyleConfigs(context: Context) {
-        val prefs = context.getSharedPreferences("sound_booster_per_style_v5", Context.MODE_PRIVATE)
+        val prefs = context.getSharedPreferences("sound_booster_per_style_v6", Context.MODE_PRIVATE)
         for (idx in 0 until TOTAL_STYLES_COUNT) {
             val def = defaultConfigs[idx] ?: defaultConfigs[1]!!
             val loadedColors = IntArray(6) { cIdx ->
@@ -237,7 +267,7 @@ object SliderThemeManager {
 
     fun saveStyleConfig(context: Context, idx: Int = AudioEngine.sliderStyleIndex) {
         val cfg = configs[idx] ?: return
-        val editor = context.getSharedPreferences("sound_booster_per_style_v5", Context.MODE_PRIVATE).edit()
+        val editor = context.getSharedPreferences("sound_booster_per_style_v6", Context.MODE_PRIVATE).edit()
         for (cIdx in 0..5) {
             editor.putInt("s_${idx}_c_$cIdx", cfg.colors[cIdx])
         }
@@ -498,7 +528,7 @@ object VectorIconRenderer {
 }
 
 // =========================================================================
-// 4. תצוגת המחוון הצף (תומך ב-100% מצב עיצוב בלבד, 200% או 300% טורבו!)
+// 4. תצוגת המחוון הצף (כולל חיתוך קפסולה כפול לזכוכית + כפתורים פעילים + אנימציית צבעים)
 // =========================================================================
 class CustomThemedSliderOverlayView(
     context: Context,
@@ -510,12 +540,15 @@ class CustomThemedSliderOverlayView(
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val rect = RectF()
     private val innerRect = RectF()
+    private val fillRect = RectF()
     private val doneBtnRect = RectF()
     private val clipPath = Path()
+    private val innerTrackClipPath = Path()
 
     var isEditPositionMode: Boolean = false
     private var lastRawX = 0f
     private var lastRawY = 0f
+    private var lastNonZeroVolume = 100
 
     private fun dp(value: Float): Float {
         return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, resources.displayMetrics)
@@ -539,6 +572,7 @@ class CustomThemedSliderOverlayView(
         val cfg = SliderThemeManager.getCurrentConfig()
         val maxScale = AudioEngine.getEffectiveMaxVolume().toFloat()
         val vol = AudioEngine.currentTotalVolume.coerceIn(0, maxScale.toInt())
+        if (vol > 0) lastNonZeroVolume = vol
         val ratio = (vol / maxScale).coerceIn(0f, 1f)
         val alphaPct = cfg.sliderAlphaPercent
 
@@ -564,13 +598,19 @@ class CustomThemedSliderOverlayView(
                 cornerPx = cornerPx, brdW = brdW, icoSize = icoSize, txtPx = txtPx,
                 dpFn = ::dp, paint = paint
             )
+            // אם זה סגנון 17 (צבעי הקשת המשתנים בהדרגה), מרעננים את הציור ברציפות ב-60FPS!
+            if (AudioEngine.sliderStyleIndex == 17) {
+                postInvalidateOnAnimation()
+            }
         } else {
+            ExtendedSkinsRenderer.clearInteractiveHitZones()
             val pad = dp(6f)
             rect.set(pad, pad + topEditOffset, w - pad, h - pad)
             val safePillRad = min(cornerPx, rect.width() / 2f)
             val safeVerticalInset = max(safePillRad * 0.65f, dp(22f))
 
             when (AudioEngine.sliderStyleIndex) {
+                // 1. עיצוב הזכוכית היוקרתי (מתוקן עם חיתוך קפסולה כפול כך שקו הסאונד לעולם לא גולש מהשוליים המעגליים!)
                 1 -> {
                     val highlightStrength = (cfg.extraParam1 / 100f).coerceIn(0.1f, 1f)
                     paint.style = Paint.Style.FILL
@@ -593,16 +633,24 @@ class CustomThemedSliderOverlayView(
                     val trackRight = w / 2f + tubeW / 2f
                     val trackTop = rect.top + safeVerticalInset + dp(12f)
                     val trackBot = rect.bottom - safeVerticalInset - dp(14f)
-                    val fillTop = trackBot - (trackBot - trackTop) * ratio
+                    val tubeCornerRad = min(cornerPx, tubeW / 2f)
 
                     innerRect.set(trackLeft, trackTop, trackRight, trackBot)
                     paint.color = applyAlpha(cfg.colors[3], 28)
-                    canvas.drawRoundRect(innerRect, tubeW / 2f, tubeW / 2f, paint)
+                    canvas.drawRoundRect(innerRect, tubeCornerRad, tubeCornerRad, paint)
 
-                    innerRect.set(trackLeft, fillTop, trackRight, trackBot)
+                    // חיתוך פנימי מדויק לנתיב הצינור המעוגל: מונע ב-100% כל גלישה של קו הסאונד מעבר לשוליים המעגליים!
+                    canvas.save()
+                    innerTrackClipPath.reset()
+                    innerTrackClipPath.addRoundRect(innerRect, tubeCornerRad, tubeCornerRad, Path.Direction.CW)
+                    canvas.clipPath(innerTrackClipPath)
+
+                    val fillTop = trackBot - (trackBot - trackTop) * ratio
+                    fillRect.set(trackLeft, fillTop, trackRight, trackBot)
                     paint.shader = LinearGradient(0f, fillTop, 0f, trackBot, c0, c1, Shader.TileMode.CLAMP)
-                    canvas.drawRoundRect(innerRect, tubeW / 2f, tubeW / 2f, paint)
+                    canvas.drawRect(fillRect, paint)
                     paint.shader = null
+                    canvas.restore()
 
                     paint.style = Paint.Style.FILL
                     paint.color = cfg.colors[4]
@@ -610,9 +658,11 @@ class CustomThemedSliderOverlayView(
                     paint.textAlign = Paint.Align.CENTER
                     canvas.drawText("$vol%", w / 2f, rect.top + safeVerticalInset, paint)
 
+                    val spkCy = rect.bottom - safeVerticalInset * 0.78f
                     VectorIconRenderer.drawStyledSpeakerIcon(
-                        canvas, w / 2f, rect.bottom - safeVerticalInset * 0.78f, icoSize, cfg.colors[4], 1, vol, paint
+                        canvas, w / 2f, spkCy, icoSize, cfg.colors[4], 1, vol, paint
                     )
+                    ExtendedSkinsRenderer.hitMuteButton.set(rect.left, spkCy - dp(20f), rect.right, rect.bottom)
                     canvas.restore()
 
                     if (brdW > 0f) {
@@ -650,9 +700,11 @@ class CustomThemedSliderOverlayView(
                     paint.textAlign = Paint.Align.CENTER
                     canvas.drawText("$vol%", w / 2f, rect.top + inset, paint)
 
+                    val spkCy = rect.bottom - inset * 0.85f
                     VectorIconRenderer.drawStyledSpeakerIcon(
-                        canvas, w / 2f, rect.bottom - inset * 0.85f, icoSize * 0.9f, cfg.colors[2], 2, vol, paint
+                        canvas, w / 2f, spkCy, icoSize * 0.9f, cfg.colors[2], 2, vol, paint
                     )
+                    ExtendedSkinsRenderer.hitMuteButton.set(left, spkCy - dp(18f), left + barW, rect.bottom)
                     canvas.restore()
                 }
 
@@ -676,6 +728,7 @@ class CustomThemedSliderOverlayView(
                     VectorIconRenderer.drawStyledSpeakerIcon(
                         canvas, dp(28f), lineY - dp(2f), icoSize, c5, 3, vol, paint
                     )
+                    ExtendedSkinsRenderer.hitMuteButton.set(0f, 0f, dp(48f), h)
 
                     val lineThick = dp(2f + (cfg.extraParam2 / 100f) * 6f)
                     paint.style = Paint.Style.STROKE
@@ -707,11 +760,20 @@ class CustomThemedSliderOverlayView(
                     val trackBot = rect.bottom - safeVerticalInset - dp(12f)
                     val fillTop = trackBot - (trackBot - trackTop) * ratio
 
-                    innerRect.set(rect.left + innerGap, fillTop, rect.right - innerGap, trackBot)
+                    innerRect.set(rect.left + innerGap, trackTop, rect.right - innerGap, trackBot)
+                    val innerRad = min(safePillRad * 0.5f, innerRect.width() / 2f)
+
+                    canvas.save()
+                    innerTrackClipPath.reset()
+                    innerTrackClipPath.addRoundRect(innerRect, innerRad, innerRad, Path.Direction.CW)
+                    canvas.clipPath(innerTrackClipPath)
+
+                    fillRect.set(innerRect.left, fillTop, innerRect.right, trackBot)
                     paint.style = Paint.Style.FILL
                     paint.shader = LinearGradient(0f, fillTop, 0f, trackBot, c1, c0, Shader.TileMode.CLAMP)
-                    canvas.drawRoundRect(innerRect, safePillRad * 0.5f, safePillRad * 0.5f, paint)
+                    canvas.drawRect(fillRect, paint)
                     paint.shader = null
+                    canvas.restore()
 
                     if (brdW > 0f) {
                         paint.style = Paint.Style.STROKE
@@ -726,9 +788,11 @@ class CustomThemedSliderOverlayView(
                     paint.textAlign = Paint.Align.CENTER
                     canvas.drawText("$vol%", w / 2f, rect.top + safeVerticalInset, paint)
 
+                    val spkCy = rect.bottom - safeVerticalInset * 0.8f
                     VectorIconRenderer.drawStyledSpeakerIcon(
-                        canvas, w / 2f, rect.bottom - safeVerticalInset * 0.8f, icoSize, c5, 4, vol, paint
+                        canvas, w / 2f, spkCy, icoSize, c5, 4, vol, paint
                     )
+                    ExtendedSkinsRenderer.hitMuteButton.set(rect.left, spkCy - dp(18f), rect.right, rect.bottom)
                 }
 
                 5 -> {
@@ -765,9 +829,11 @@ class CustomThemedSliderOverlayView(
                     paint.textAlign = Paint.Align.CENTER
                     canvas.drawText("$vol%", cx, cy + dp(5f), paint)
 
+                    val spkCy = rect.bottom - safeVerticalInset * 0.85f
                     VectorIconRenderer.drawStyledSpeakerIcon(
-                        canvas, cx, rect.bottom - safeVerticalInset * 0.85f, icoSize, c5, 5, vol, paint
+                        canvas, cx, spkCy, icoSize, c5, 5, vol, paint
                     )
+                    ExtendedSkinsRenderer.hitMuteButton.set(rect.left, spkCy - dp(18f), rect.right, rect.bottom)
                 }
 
                 6 -> {
@@ -811,9 +877,11 @@ class CustomThemedSliderOverlayView(
                     paint.textAlign = Paint.Align.CENTER
                     canvas.drawText("$vol%", w / 2f, rect.top + safeVerticalInset, paint)
 
+                    val spkCy = rect.bottom - safeVerticalInset * 0.8f
                     VectorIconRenderer.drawStyledSpeakerIcon(
-                        canvas, w / 2f, rect.bottom - safeVerticalInset * 0.8f, icoSize, c5, 6, vol, paint
+                        canvas, w / 2f, spkCy, icoSize, c5, 6, vol, paint
                     )
+                    ExtendedSkinsRenderer.hitMuteButton.set(rect.left, spkCy - dp(18f), rect.right, rect.bottom)
                 }
 
                 7 -> {
@@ -844,9 +912,11 @@ class CustomThemedSliderOverlayView(
                     paint.textAlign = Paint.Align.CENTER
                     canvas.drawText("$vol%", w / 2f, rect.top + inset, paint)
 
+                    val spkCy = rect.bottom - inset * 0.85f
                     VectorIconRenderer.drawStyledSpeakerIcon(
-                        canvas, w / 2f, rect.bottom - inset * 0.85f, icoSize, cfg.colors[3], 7, vol, paint
+                        canvas, w / 2f, spkCy, icoSize, cfg.colors[3], 7, vol, paint
                     )
+                    ExtendedSkinsRenderer.hitMuteButton.set(left, spkCy - dp(18f), left + pillW, rect.bottom)
                     canvas.restore()
 
                     if (brdW > 0f) {
@@ -893,9 +963,11 @@ class CustomThemedSliderOverlayView(
                     paint.textAlign = Paint.Align.CENTER
                     canvas.drawText("$vol%", w / 2f, rect.top + dp(21f), paint)
 
+                    val spkCy = rect.bottom - dp(16f)
                     VectorIconRenderer.drawStyledSpeakerIcon(
-                        canvas, w / 2f, rect.bottom - dp(16f), icoSize, c5, 8, vol, paint
+                        canvas, w / 2f, spkCy, icoSize, c5, 8, vol, paint
                     )
+                    ExtendedSkinsRenderer.hitMuteButton.set(rect.left, spkCy - dp(18f), rect.right, rect.bottom)
                 }
 
                 9 -> {
@@ -909,10 +981,16 @@ class CustomThemedSliderOverlayView(
                     paint.color = c1
                     canvas.drawRoundRect(rect, rad, rad, paint)
 
+                    canvas.save()
+                    innerTrackClipPath.reset()
+                    innerTrackClipPath.addRoundRect(rect, rad, rad, Path.Direction.CW)
+                    canvas.clipPath(innerTrackClipPath)
+
                     val fillTop = rect.bottom - rect.height() * ratio
                     innerRect.set(xPos, fillTop, xPos + barW, rect.bottom)
                     paint.color = c0
-                    canvas.drawRoundRect(innerRect, rad, rad, paint)
+                    canvas.drawRect(innerRect, paint)
+                    canvas.restore()
 
                     paint.color = cfg.colors[2]
                     paint.textSize = txtPx
@@ -966,9 +1044,11 @@ class CustomThemedSliderOverlayView(
                     paint.textAlign = Paint.Align.CENTER
                     canvas.drawText("$vol%", w / 2f, rect.top + safeVerticalInset, paint)
 
+                    val spkCy = rect.bottom - safeVerticalInset * 0.8f
                     VectorIconRenderer.drawStyledSpeakerIcon(
-                        canvas, w / 2f, rect.bottom - safeVerticalInset * 0.8f, icoSize, c5, 10, vol, paint
+                        canvas, w / 2f, spkCy, icoSize, c5, 10, vol, paint
                     )
+                    ExtendedSkinsRenderer.hitMuteButton.set(rect.left, spkCy - dp(18f), rect.right, rect.bottom)
                 }
             }
         }
@@ -990,6 +1070,83 @@ class CustomThemedSliderOverlayView(
             paint.textAlign = Paint.Align.CENTER
             canvas.drawText("✓ סיים", w / 2f, dp(23f), paint)
         }
+    }
+
+    // מפעיל את הפעולה האמיתית של כל כפתור על המחוון כפי שציורו מרמז!
+    private fun handleInteractiveOverlayButtonClick(x: Float, y: Float): Boolean {
+        val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return false
+
+        // 1. כפתור רמקול פעיל -> מפעיל צליל רגיל ומחזיר ווליום אם היה מושתק
+        if (ExtendedSkinsRenderer.hitSpeakerButton.contains(x, y)) {
+            runCatching { am.ringerMode = AudioManager.RINGER_MODE_NORMAL }
+            if (AudioEngine.currentTotalVolume == 0) {
+                val restored = lastNonZeroVolume.coerceAtLeast(60)
+                AudioEngine.currentTotalVolume = restored
+                onVolumeDragged(restored)
+            }
+            Toast.makeText(context, "מצב צליל פעיל 🔊", Toast.LENGTH_SHORT).show()
+            invalidate()
+            return true
+        }
+
+        // 2. כפתור רטט -> מעביר למצב רטט ומבצע פידבק רטט
+        if (ExtendedSkinsRenderer.hitVibrateButton.contains(x, y)) {
+            runCatching { am.ringerMode = AudioManager.RINGER_MODE_VIBRATE }
+            runCatching {
+                val vib = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vib?.vibrate(VibrationEffect.createOneShot(60, VibrationEffect.DEFAULT_AMPLITUDE))
+                } else {
+                    @Suppress("DEPRECATION")
+                    vib?.vibrate(60)
+                }
+            }
+            Toast.makeText(context, "מצב רטט הופעל 📳", Toast.LENGTH_SHORT).show()
+            invalidate()
+            return true
+        }
+
+        // 3. כפתור השתק -> משתיק ל-0% (או משחזר אם כבר ב-0%)
+        if (ExtendedSkinsRenderer.hitMuteButton.contains(x, y)) {
+            if (AudioEngine.currentTotalVolume > 0) {
+                lastNonZeroVolume = AudioEngine.currentTotalVolume
+                AudioEngine.currentTotalVolume = 0
+                runCatching { am.ringerMode = AudioManager.RINGER_MODE_SILENT }
+                onVolumeDragged(0)
+                Toast.makeText(context, "הושתק 🔇", Toast.LENGTH_SHORT).show()
+            } else {
+                val restored = lastNonZeroVolume.coerceAtLeast(50)
+                AudioEngine.currentTotalVolume = restored
+                runCatching { am.ringerMode = AudioManager.RINGER_MODE_NORMAL }
+                onVolumeDragged(restored)
+                Toast.makeText(context, "ביטול השתקה ($restored%) 🔊", Toast.LENGTH_SHORT).show()
+            }
+            invalidate()
+            return true
+        }
+
+        // 4. כפתור Play/Pause (בסגנונות 11 ו-12) -> מפעיל/עוצר מוזיקה מתנגנת
+        if (ExtendedSkinsRenderer.hitPlayPauseButton.contains(x, y)) {
+            runCatching {
+                val downEvent = KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+                val upEvent = KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+                am.dispatchMediaKeyEvent(downEvent)
+                am.dispatchMediaKeyEvent(upEvent)
+            }
+            Toast.makeText(context, "ניגון / השהיית מדיה ⏯", Toast.LENGTH_SHORT).show()
+            return true
+        }
+
+        // 5. כפתור החלפת צד מסך ⇄ (בסגנון 11)
+        if (ExtendedSkinsRenderer.hitSwapSideButton.contains(x, y)) {
+            val cfg = SliderThemeManager.getCurrentConfig()
+            cfg.posXPercent = if (cfg.posXPercent >= 50) 6 else 94
+            SliderThemeManager.saveStyleConfig(context)
+            VolumeOverlayService.instance?.refreshOverlayLive(updateLayout = true)
+            return true
+        }
+
+        return false
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -1017,7 +1174,21 @@ class CustomThemedSliderOverlayView(
             return true
         }
 
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            // בדיקה אם המשתמש לחץ על אחד מכפתורי הפעולה המצוירים על המחוון (רמקול / רטט / השתק / Play)
+            if (handleInteractiveOverlayButtonClick(event.x, event.y)) {
+                return true
+            }
+        }
+
         if (event.action == MotionEvent.ACTION_DOWN || event.action == MotionEvent.ACTION_MOVE) {
+            // בסגנונות 16 ו-17 שבהם יש עמודת כפתורים בצד ימין, גרירת הווליום מתבצעת בצד השמאלי של הכרטיסייה
+            if ((AudioEngine.sliderStyleIndex == 16 || AudioEngine.sliderStyleIndex == 17) &&
+                event.x > width * 0.58f && event.action == MotionEvent.ACTION_DOWN
+            ) {
+                return true
+            }
+
             val isHorizontalStyle = (AudioEngine.sliderStyleIndex == 3 || AudioEngine.sliderStyleIndex == 13)
             val ratio = if (isHorizontalStyle) {
                 (event.x / width.toFloat()).coerceIn(0f, 1f)
