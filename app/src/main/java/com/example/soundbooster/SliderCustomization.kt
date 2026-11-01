@@ -24,7 +24,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 
 // =========================================================================
-// 1. מפרט ייעודי לכל אחד מ-21 סוגי המחוונים (0..10 המקוריים + 11..20 החדשים)
+// 1. מפרט ייעודי לכל אחד מ-15 סוגי המחוונים (0..14 המסודרים מחדש)
 // =========================================================================
 data class StyleCapabilities(
     val styleIndex: Int,
@@ -59,7 +59,7 @@ data class StyleConfig(
 
 object SliderThemeManager {
 
-    const val TOTAL_STYLES_COUNT = 21
+    const val TOTAL_STYLES_COUNT = 15
 
     val styleCapabilities = mapOf(
         0 to StyleCapabilities(
@@ -83,11 +83,11 @@ object SliderThemeManager {
             true, true, true, "עוצמת זוהר פנימי (Cyber Glow)", "מרווח מסגרת כפולה"
         ),
         5 to StyleCapabilities(
-            5, listOf("קשת חוגה פעילה", "קשת שיא (מעל 150%)", "מסילת חוגה כבויה", "רקע קופסת אולפן", "מסגרת אולפן", "טקסט וסמל"),
+            5, listOf("קשת חוגה פעילה", "קשת שיא (טורבו)", "מסילת חוגה כבויה", "רקע קופסת אולפן", "מסגרת אולפן", "טקסט וסמל"),
             true, true, true, "עובי טבעת החוגה האנלוגית", "רדיוס קשת החוגה"
         ),
         6 to StyleCapabilities(
-            6, listOf("גלים תחתונים (0-100%)", "גלים עליונים (100-200%)", "גלים כבויים", "רקע מחוון", "מסגרת מחוון", "טקסט וסמל"),
+            6, listOf("גלים תחתונים", "גלים עליונים (מוגבר)", "גלים כבויים", "רקע מחוון", "מסגרת מחוון", "טקסט וסמל"),
             true, true, true, "כמות עמודות גלי הקול", "מרווח אנכי בין הגלים"
         ),
         7 to StyleCapabilities(
@@ -95,7 +95,7 @@ object SliderThemeManager {
             true, true, true, "רוחב קפסולה פנימית", null
         ),
         8 to StyleCapabilities(
-            8, listOf("קוביות 8-Bit דולקות", "קוביות שיא (200%)", "קוביות כבויות", "רקע ארקייד", "מסגרת פיקסל", "טקסט וסמל פיקסל"),
+            8, listOf("קוביות 8-Bit דולקות", "קוביות שיא (טורבו)", "קוביות כבויות", "רקע ארקייד", "מסגרת פיקסל", "טקסט וסמל פיקסל"),
             true, false, true, "מספר קוביות פיקסל", "מרווח בין קוביות"
         ),
         9 to StyleCapabilities(
@@ -103,48 +103,24 @@ object SliderThemeManager {
             false, true, false, "עובי פס הקצה", "מרחק הטקסט מפס הקצה"
         ),
         10 to StyleCapabilities(
-            10, listOf("נוריות ירוקות (רגיל)", "נוריות צהובות (מוגבר)", "נוריות אדומות (שיא 200%)", "נוריות כבויות", "רקע לוח מטריצה", "מסגרת וטקסט"),
+            10, listOf("נוריות ירוקות (רגיל)", "נוריות צהובות (מוגבר)", "נוריות אדומות (שיא)", "נוריות כבויות", "רקע לוח מטריצה", "מסגרת וטקסט"),
             true, true, true, "מספר שורות נוריות LED", "מספר עמודות נוריות LED"
         ),
-        // --- 10 המחוונים החדשים מהתמונות ---
+        // --- 4 המחוונים הנוספים שמספורם סודר ל-11..14 ---
         11 to StyleCapabilities(
-            11, listOf("גרדיאנט עליון", "גרדיאנט תחתון", "רקע קפסולה ראשית", "מסגרת קפסולה", "סמלים וטקסט", "רקע קפסולת תפריט תחתונה"),
-            true, true, true, "יחס גובה קפסולה מול תפריט", "מרווח הפרדה אנכי"
-        ),
-        12 to StyleCapabilities(
-            12, listOf("מילוי מנטה ראשי", "רקע מסילה כהה", "רקע כפתורים תחתונים", "מסגרת", "צבע תו וסמלים", "צבע טקסט אחוזים"),
-            false, true, true, "עיגול מילוי פנימי", "מרווח בין כפתורי המודול"
-        ),
-        13 to StyleCapabilities(
-            13, listOf("ניאון ערוץ ראשי", "ניאון ערוצים משניים", "רקע כרטיסיית ניאון", "מסגרת ניאון זוהרת", "סמלים ומסילות", "טקסט כותרת"),
-            true, true, true, "גודל נקודת אחיזה זוהרת", "עובי קווי הניאון"
-        ),
-        14 to StyleCapabilities(
-            14, listOf("גרדיאנט עמודות עליון", "גרדיאנט עמודות תחתון", "רקע כרטיסייה", "מסגרת כרטיסייה", "רקע חריץ עמודה", "סמלים וטקסט"),
-            true, true, true, "רוחב עמודות הקפסולה", null
-        ),
-        15 to StyleCapabilities(
-            15, listOf("קו מילוי וכפתור Play", "מסילה דקה אחורית", "רקע קפסולה לבנה/בהירה", "מסגרת קפסולה", "טקסט וחצים", "משולש Play פנימי"),
+            11, listOf("קו מילוי וכפתור Play", "מסילה דקה אחורית", "רקע קפסולה לבנה/בהירה", "מסגרת קפסולה", "טקסט וחצים", "משולש Play פנימי"),
             true, true, true, "עובי קו המילוי הדק", "רוחב הקפסולה"
         ),
-        16 to StyleCapabilities(
-            16, listOf("מילוי פסים אופקיים", "רקע מסילות אופקיות", "רקע חלון הפאנל", "מסגרת הפאנל", "כותרות ערוצים", "סמלים פנימיים"),
-            true, true, true, "רדיוס פינות הפסים", null
-        ),
-        17 to StyleCapabilities(
-            17, listOf("קו זהב פעיל", "עיגול אחיזה (Knob)", "רקע עמודה כהה", "מסגרת עמודה", "מסילה אחורית דקה", "סמל תו וטקסט זהב"),
+        12 to StyleCapabilities(
+            12, listOf("קו זהב פעיל", "עיגול אחיזה (Knob)", "רקע עמודה כהה", "מסגרת עמודה", "מסילה אחורית דקה", "סמל תו וטקסט זהב"),
             true, true, true, "גודל עיגול האחיזה", "עובי קו הזהב"
         ),
-        18 to StyleCapabilities(
-            18, listOf("קווי עוצמה אנכיים", "ידיות עגולות לבנות", "רקע מיקסר כחול כהה", "מסגרת מיקסר", "רקע תגית עליונה", "סמלים וטקסט"),
-            true, true, true, "גודל ידיות העיגולים", null
-        ),
-        19 to StyleCapabilities(
-            19, listOf("גרדיאנט שמאל", "גרדיאנט ימין", "רקע בר עליון", "מסגרת בר", "תו מוזיקה וטקסט", "צבע משני"),
+        13 to StyleCapabilities(
+            13, listOf("גרדיאנט שמאל", "גרדיאנט ימין", "רקע בר עליון", "מסגרת בר", "תו מוזיקה וטקסט", "צבע משני"),
             true, true, true, "עובי בר עליון", null
         ),
-        20 to StyleCapabilities(
-            20, listOf("מילוי עליון", "מילוי תחתון", "רקע קפסולה", "מסגרת קפסולה", "עיגול ראש מודגש", "סמל וטקסט"),
+        14 to StyleCapabilities(
+            14, listOf("מילוי עליון", "מילוי תחתון", "רקע קפסולה", "מסגרת קפסולה", "עיגול ראש מודגש", "סמל וטקסט"),
             true, true, true, "רוחב קפסולה", null
         )
     )
@@ -194,44 +170,20 @@ object SliderThemeManager {
             intArrayOf(Color.parseColor("#00E676"), Color.parseColor("#FFD740"), Color.parseColor("#FF5252"), Color.parseColor("#222B38"), Color.parseColor("#10141D"), Color.parseColor("#FFFFFF")),
             94, true, 45, false, 20, 88, 290, 94, 50, 24, 2, 95, 12, 65, 50
         ),
-        // --- ברירות המחדל של 10 המחוונים החדשים מהתמונות ---
+        // --- 11..14 המסודרים מחדש ---
         11 to StyleConfig(
-            intArrayOf(Color.parseColor("#00C6FF"), Color.parseColor("#00F2FE"), Color.parseColor("#1F2937"), Color.parseColor("#FFFFFF"), Color.parseColor("#111827"), Color.parseColor("#F3F4F6")),
-            94, true, 55, false, 10, 72, 310, 94, 50, 36, 2, 100, 12, 70, 45
-        ),
-        12 to StyleConfig(
-            intArrayOf(Color.parseColor("#B5DDD1"), Color.parseColor("#23272A"), Color.parseColor("#B5DDD1"), Color.parseColor("#3A465E"), Color.parseColor("#111417"), Color.parseColor("#FFFFFF")),
-            95, true, 45, false, 10, 68, 320, 8, 55, 22, 0, 100, 12, 60, 40
-        ),
-        13 to StyleConfig(
-            intArrayOf(Color.parseColor("#39FF14"), Color.parseColor("#A3FF00"), Color.parseColor("#110926"), Color.parseColor("#B026FF"), Color.parseColor("#E0E6FF"), Color.parseColor("#39FF14")),
-            92, true, 65, false, 25, 235, 255, 50, 50, 26, 2, 95, 13, 55, 50
-        ),
-        14 to StyleConfig(
-            intArrayOf(Color.parseColor("#FF2CDF"), Color.parseColor("#00E5FF"), Color.parseColor("#140D2B"), Color.parseColor("#7928CA"), Color.parseColor("#251B42"), Color.parseColor("#FFFFFF")),
-            94, true, 60, false, 20, 230, 250, 50, 50, 26, 2, 95, 13, 65, 50
-        ),
-        15 to StyleConfig(
             intArrayOf(Color.parseColor("#A91D22"), Color.parseColor("#F2C6C8"), Color.parseColor("#FFFFFF"), Color.parseColor("#E2E8F0"), Color.parseColor("#1E293B"), Color.parseColor("#FFFFFF")),
             96, true, 40, false, 10, 62, 285, 94, 48, 30, 1, 95, 11, 45, 75
         ),
-        16 to StyleConfig(
-            intArrayOf(Color.parseColor("#4ADE80"), Color.parseColor("#1F2421"), Color.parseColor("#121514"), Color.parseColor("#2E3833"), Color.parseColor("#F1F5F9"), Color.parseColor("#0F172A")),
-            95, true, 60, true, 25, 305, 275, 50, 45, 24, 1, 100, 12, 55, 50
-        ),
-        17 to StyleConfig(
+        12 to StyleConfig(
             intArrayOf(Color.parseColor("#EAB308"), Color.parseColor("#78716C"), Color.parseColor("#262626"), Color.parseColor("#404040"), Color.parseColor("#525252"), Color.parseColor("#FACC15")),
             92, true, 50, false, 15, 68, 280, 94, 50, 22, 1, 100, 12, 55, 45
         ),
-        18 to StyleConfig(
-            intArrayOf(Color.parseColor("#E2E8F0"), Color.parseColor("#FFFFFF"), Color.parseColor("#172554"), Color.parseColor("#1E3A8A"), Color.parseColor("#1E40AF"), Color.parseColor("#FFFFFF")),
-            94, true, 60, false, 20, 290, 235, 50, 50, 20, 2, 95, 12, 55, 50
-        ),
-        19 to StyleConfig(
+        13 to StyleConfig(
             intArrayOf(Color.parseColor("#8B5CF6"), Color.parseColor("#3B82F6"), Color.parseColor("#1E1B4B"), Color.parseColor("#6366F1"), Color.parseColor("#FFFFFF"), Color.parseColor("#00E676")),
             95, false, 0, false, 0, 340, 44, 50, 2, 14, 1, 95, 12, 50, 50
         ),
-        20 to StyleConfig(
+        14 to StyleConfig(
             intArrayOf(Color.parseColor("#F59E0B"), Color.parseColor("#D97706"), Color.parseColor("#27272A"), Color.parseColor("#52525B"), Color.parseColor("#FDE047"), Color.parseColor("#FFFFFF")),
             94, true, 45, false, 10, 70, 270, 94, 50, 34, 2, 95, 12, 65, 50
         )
@@ -256,7 +208,7 @@ object SliderThemeManager {
     }
 
     fun loadAllStyleConfigs(context: Context) {
-        val prefs = context.getSharedPreferences("sound_booster_per_style_v4", Context.MODE_PRIVATE)
+        val prefs = context.getSharedPreferences("sound_booster_per_style_v5", Context.MODE_PRIVATE)
         for (idx in 0 until TOTAL_STYLES_COUNT) {
             val def = defaultConfigs[idx] ?: defaultConfigs[1]!!
             val loadedColors = IntArray(6) { cIdx ->
@@ -285,7 +237,7 @@ object SliderThemeManager {
 
     fun saveStyleConfig(context: Context, idx: Int = AudioEngine.sliderStyleIndex) {
         val cfg = configs[idx] ?: return
-        val editor = context.getSharedPreferences("sound_booster_per_style_v4", Context.MODE_PRIVATE).edit()
+        val editor = context.getSharedPreferences("sound_booster_per_style_v5", Context.MODE_PRIVATE).edit()
         for (cIdx in 0..5) {
             editor.putInt("s_${idx}_c_$cIdx", cfg.colors[cIdx])
         }
@@ -546,7 +498,7 @@ object VectorIconRenderer {
 }
 
 // =========================================================================
-// 4. תצוגת המחוון הצף (עם תיקון מלא לקצוות העגולים ותמיכה בכל 21 העיצובים!)
+// 4. תצוגת המחוון הצף (תומך ב-100% מצב עיצוב בלבד, 200% או 300% טורבו!)
 // =========================================================================
 class CustomThemedSliderOverlayView(
     context: Context,
@@ -585,8 +537,9 @@ class CustomThemedSliderOverlayView(
         if (w <= 0f || h <= 0f) return
 
         val cfg = SliderThemeManager.getCurrentConfig()
-        val vol = AudioEngine.currentTotalVolume.coerceIn(0, 200)
-        val ratio = vol / 200f
+        val maxScale = AudioEngine.getEffectiveMaxVolume().toFloat()
+        val vol = AudioEngine.currentTotalVolume.coerceIn(0, maxScale.toInt())
+        val ratio = (vol / maxScale).coerceIn(0f, 1f)
         val alphaPct = cfg.sliderAlphaPercent
 
         val c0 = applyAlpha(cfg.colors[0], (alphaPct + 10).coerceAtMost(100))
@@ -602,7 +555,6 @@ class CustomThemedSliderOverlayView(
         val txtPx = sp(cfg.textSizeSp.toFloat())
         val topEditOffset = if (isEditPositionMode) dp(36f) else 0f
 
-        // אם נבחר אחד מ-10 העיצובים החדשים (11..20), מצייר דרך ExtendedSkinsRenderer
         if (AudioEngine.sliderStyleIndex >= 11) {
             ExtendedSkinsRenderer.drawExtendedStyle(
                 styleIndex = AudioEngine.sliderStyleIndex,
@@ -613,7 +565,6 @@ class CustomThemedSliderOverlayView(
                 dpFn = ::dp, paint = paint
             )
         } else {
-            // סגנונות 1..10 עם תיקון מלא לקצוות העגולים (אין גלישת סמלים מתחת לקו ההגברה!)
             val pad = dp(6f)
             rect.set(pad, pad + topEditOffset, w - pad, h - pad)
             val safePillRad = min(cornerPx, rect.width() / 2f)
@@ -805,7 +756,7 @@ class CustomThemedSliderOverlayView(
                     paint.strokeCap = Paint.Cap.ROUND
                     canvas.drawArc(innerRect, 135f, 270f, false, paint)
 
-                    paint.color = if (vol > 150) c1 else c0
+                    paint.color = if (ratio > 0.75f) c1 else c0
                     canvas.drawArc(innerRect, 135f, 270f * ratio, false, paint)
 
                     paint.style = Paint.Style.FILL
@@ -1067,15 +1018,14 @@ class CustomThemedSliderOverlayView(
         }
 
         if (event.action == MotionEvent.ACTION_DOWN || event.action == MotionEvent.ACTION_MOVE) {
-            val isHorizontalStyle = (AudioEngine.sliderStyleIndex == 3 ||
-                                     AudioEngine.sliderStyleIndex == 16 ||
-                                     AudioEngine.sliderStyleIndex == 19)
+            val isHorizontalStyle = (AudioEngine.sliderStyleIndex == 3 || AudioEngine.sliderStyleIndex == 13)
             val ratio = if (isHorizontalStyle) {
                 (event.x / width.toFloat()).coerceIn(0f, 1f)
             } else {
                 1f - (event.y / height.toFloat()).coerceIn(0f, 1f)
             }
-            val newVol = (ratio * 200).roundToInt().coerceIn(0, 200)
+            val maxAllowed = AudioEngine.getEffectiveMaxVolume()
+            val newVol = (ratio * maxAllowed).roundToInt().coerceIn(0, maxAllowed)
             AudioEngine.currentTotalVolume = newVol
             invalidate()
             onVolumeDragged(newVol)
