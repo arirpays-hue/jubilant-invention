@@ -1,5 +1,7 @@
 package com.example.soundbooster
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
@@ -19,6 +21,9 @@ import android.util.TypedValue
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.animation.AccelerateInterpolator
+import android.view.animation.DecelerateInterpolator
+import android.view.animation.OvershootInterpolator
 import android.widget.Toast
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -30,7 +35,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 
 // =========================================================================
-// 1. מפרט ייעודי לכל אחד מ-18 סוגי המחוונים
+// 1. מפרט ייעודי לכל אחד מ-18 סוגי המחוונים + הגדרת סגירה בנגיעה מחוץ למחוון
 // =========================================================================
 data class StyleCapabilities(
     val styleIndex: Int,
@@ -58,7 +63,8 @@ data class StyleConfig(
     var iconSizePercent: Int,
     var textSizeSp: Int,
     var extraParam1: Int,
-    var extraParam2: Int
+    var extraParam2: Int,
+    var dismissOnOutsideTouch: Boolean = true
 ) {
     fun copyConfig(): StyleConfig = copy(colors = colors.clone())
 }
@@ -145,75 +151,75 @@ object SliderThemeManager {
     private val defaultConfigs = mapOf(
         0 to StyleConfig(
             intArrayOf(Color.parseColor("#EEF2F6"), Color.parseColor("#3B607A"), Color.parseColor("#1B2C38"), Color.WHITE, Color.WHITE, Color.WHITE),
-            95, false, 30, false, 0, 125, 52, 94, 25, 24, 2, 100, 13, 50, 50
+            95, false, 30, false, 0, 125, 52, 94, 25, 24, 2, 100, 13, 50, 50, true
         ),
         1 to StyleConfig(
             intArrayOf(Color.parseColor("#00E5FF"), Color.parseColor("#0077FF"), Color.parseColor("#E8F4FF"), Color.parseColor("#FFFFFF"), Color.parseColor("#0B192C"), Color.parseColor("#FFFFFF")),
-            72, true, 65, false, 15, 76, 275, 94, 50, 36, 2, 95, 13, 70, 65
+            72, true, 65, false, 15, 76, 275, 94, 50, 36, 2, 95, 13, 70, 65, true
         ),
         2 to StyleConfig(
             intArrayOf(Color.parseColor("#00E676"), Color.parseColor("#222B3A"), Color.parseColor("#FFFFFF"), Color.WHITE, Color.WHITE, Color.WHITE),
-            92, false, 20, false, 0, 64, 260, 95, 50, 30, 0, 95, 12, 60, 50
+            92, false, 20, false, 0, 64, 260, 95, 50, 30, 0, 95, 12, 60, 50, true
         ),
         3 to StyleConfig(
             intArrayOf(Color.parseColor("#33B5E5"), Color.parseColor("#00E5FF"), Color.parseColor("#444E5E"), Color.parseColor("#1B2028"), Color.parseColor("#33B5E5"), Color.parseColor("#FFFFFF")),
-            95, false, 0, false, 20, 310, 90, 50, 12, 8, 2, 100, 13, 55, 50
+            95, false, 0, false, 20, 310, 90, 50, 12, 8, 2, 100, 13, 55, 50, true
         ),
         4 to StyleConfig(
             intArrayOf(Color.parseColor("#FF007F"), Color.parseColor("#00F0FF"), Color.parseColor("#0D0221"), Color.parseColor("#00F0FF"), Color.parseColor("#00F0FF"), Color.parseColor("#FF007F")),
-            92, true, 50, false, 30, 84, 285, 94, 50, 8, 3, 100, 13, 75, 50
+            92, true, 50, false, 30, 84, 285, 94, 50, 8, 3, 100, 13, 75, 50, true
         ),
         5 to StyleConfig(
             intArrayOf(Color.parseColor("#00E676"), Color.parseColor("#FF5252"), Color.parseColor("#323B4D"), Color.parseColor("#181D26"), Color.parseColor("#4E5869"), Color.parseColor("#FFD740")),
-            94, true, 40, false, 20, 126, 240, 90, 50, 28, 2, 100, 14, 60, 70
+            94, true, 40, false, 20, 126, 240, 90, 50, 28, 2, 100, 14, 60, 70, true
         ),
         6 to StyleConfig(
             intArrayOf(Color.parseColor("#00E5FF"), Color.parseColor("#BB86FC"), Color.parseColor("#2A3346"), Color.parseColor("#141824"), Color.parseColor("#BB86FC"), Color.parseColor("#FFFFFF")),
-            90, true, 50, false, 15, 84, 280, 94, 50, 30, 2, 95, 12, 60, 50
+            90, true, 50, false, 15, 84, 280, 94, 50, 30, 2, 95, 12, 60, 50, true
         ),
         7 to StyleConfig(
             intArrayOf(Color.parseColor("#FFFFFF"), Color.parseColor("#2B3548"), Color.parseColor("#80FFFFFF"), Color.parseColor("#101824"), Color.WHITE, Color.WHITE),
-            85, true, 75, false, 10, 74, 265, 94, 50, 38, 1, 95, 12, 75, 50
+            85, true, 75, false, 10, 74, 265, 94, 50, 38, 1, 95, 12, 75, 50, true
         ),
         8 to StyleConfig(
             intArrayOf(Color.parseColor("#39FF14"), Color.parseColor("#FF2A55"), Color.parseColor("#222831"), Color.parseColor("#0F1217"), Color.parseColor("#39FF14"), Color.parseColor("#39FF14")),
-            96, false, 0, false, 25, 86, 280, 94, 50, 0, 3, 100, 12, 55, 45
+            96, false, 0, false, 25, 86, 280, 94, 50, 0, 3, 100, 12, 55, 45, true
         ),
         9 to StyleConfig(
             intArrayOf(Color.parseColor("#00E5FF"), Color.parseColor("#1B2434"), Color.parseColor("#00E5FF"), Color.WHITE, Color.WHITE, Color.WHITE),
-            92, false, 30, false, 0, 64, 310, 99, 50, 18, 0, 100, 12, 55, 60
+            92, false, 30, false, 0, 64, 310, 99, 50, 18, 0, 100, 12, 55, 60, true
         ),
         10 to StyleConfig(
             intArrayOf(Color.parseColor("#00E676"), Color.parseColor("#FFD740"), Color.parseColor("#FF5252"), Color.parseColor("#222B38"), Color.parseColor("#10141D"), Color.parseColor("#FFFFFF")),
-            94, true, 45, false, 20, 88, 290, 94, 50, 24, 2, 95, 12, 65, 50
+            94, true, 45, false, 20, 88, 290, 94, 50, 24, 2, 95, 12, 65, 50, true
         ),
         11 to StyleConfig(
             intArrayOf(Color.parseColor("#A91D22"), Color.parseColor("#F2C6C8"), Color.parseColor("#FFFFFF"), Color.parseColor("#E2E8F0"), Color.parseColor("#1E293B"), Color.parseColor("#FFFFFF")),
-            96, true, 40, false, 10, 62, 285, 94, 48, 30, 1, 95, 11, 45, 75
+            96, true, 40, false, 10, 62, 285, 94, 48, 30, 1, 95, 11, 45, 75, true
         ),
         12 to StyleConfig(
             intArrayOf(Color.parseColor("#EAB308"), Color.parseColor("#78716C"), Color.parseColor("#262626"), Color.parseColor("#404040"), Color.parseColor("#525252"), Color.parseColor("#FACC15")),
-            92, true, 50, false, 15, 68, 280, 94, 50, 22, 1, 100, 12, 55, 45
+            92, true, 50, false, 15, 68, 280, 94, 50, 22, 1, 100, 12, 55, 45, true
         ),
         13 to StyleConfig(
             intArrayOf(Color.parseColor("#8B5CF6"), Color.parseColor("#3B82F6"), Color.parseColor("#1E1B4B"), Color.parseColor("#6366F1"), Color.parseColor("#FFFFFF"), Color.parseColor("#00E676")),
-            95, false, 0, false, 0, 340, 44, 50, 2, 14, 1, 95, 12, 50, 50
+            95, false, 0, false, 0, 340, 44, 50, 2, 14, 1, 95, 12, 50, 50, true
         ),
         14 to StyleConfig(
             intArrayOf(Color.parseColor("#F59E0B"), Color.parseColor("#D97706"), Color.parseColor("#27272A"), Color.parseColor("#52525B"), Color.parseColor("#FDE047"), Color.parseColor("#FFFFFF")),
-            94, true, 45, false, 10, 70, 270, 94, 50, 34, 2, 95, 12, 65, 50
+            94, true, 45, false, 10, 70, 270, 94, 50, 34, 2, 95, 12, 65, 50, true
         ),
         15 to StyleConfig(
             intArrayOf(Color.parseColor("#00F0FF"), Color.parseColor("#FF00A0"), Color.parseColor("#080D1A"), Color.parseColor("#00E5FF"), Color.parseColor("#00F0FF"), Color.parseColor("#00FFFF")),
-            90, true, 60, false, 20, 148, 340, 12, 48, 16, 1, 100, 12, 50, 55
+            90, true, 60, false, 20, 148, 340, 12, 48, 16, 1, 100, 12, 50, 55, true
         ),
         16 to StyleConfig(
             intArrayOf(Color.parseColor("#2AF5D2"), Color.parseColor("#FF7B54"), Color.parseColor("#F2ECF4"), Color.parseColor("#FFFFFF"), Color.parseColor("#1E1B18"), Color.parseColor("#4CE0D2")),
-            78, true, 80, false, 10, 108, 305, 92, 50, 28, 1, 100, 12, 45, 50
+            78, true, 80, false, 10, 108, 305, 92, 50, 28, 1, 100, 12, 45, 50, true
         ),
         17 to StyleConfig(
             intArrayOf(Color.parseColor("#FFE600"), Color.parseColor("#FF5E00"), Color.parseColor("#F0F4F8"), Color.parseColor("#FFFFFF"), Color.parseColor("#FF007F"), Color.parseColor("#0051FF")),
-            80, true, 85, false, 10, 114, 310, 92, 50, 28, 1, 100, 12, 60, 55
+            80, true, 85, false, 10, 114, 310, 92, 50, 28, 1, 100, 12, 60, 55, true
         )
     )
 
@@ -236,7 +242,7 @@ object SliderThemeManager {
     }
 
     fun loadAllStyleConfigs(context: Context) {
-        val prefs = context.getSharedPreferences("sound_booster_per_style_v6", Context.MODE_PRIVATE)
+        val prefs = context.getSharedPreferences("sound_booster_per_style_v7", Context.MODE_PRIVATE)
         for (idx in 0 until TOTAL_STYLES_COUNT) {
             val def = defaultConfigs[idx] ?: defaultConfigs[1]!!
             val loadedColors = IntArray(6) { cIdx ->
@@ -258,14 +264,15 @@ object SliderThemeManager {
                 iconSizePercent = prefs.getInt("s_${idx}_ico_s", def.iconSizePercent),
                 textSizeSp = prefs.getInt("s_${idx}_txt_s", def.textSizeSp),
                 extraParam1 = prefs.getInt("s_${idx}_ex1", def.extraParam1),
-                extraParam2 = prefs.getInt("s_${idx}_ex2", def.extraParam2)
+                extraParam2 = prefs.getInt("s_${idx}_ex2", def.extraParam2),
+                dismissOnOutsideTouch = prefs.getBoolean("s_${idx}_out_dismiss", def.dismissOnOutsideTouch)
             )
         }
     }
 
     fun saveStyleConfig(context: Context, idx: Int = AudioEngine.sliderStyleIndex) {
         val cfg = configs[idx] ?: return
-        val editor = context.getSharedPreferences("sound_booster_per_style_v6", Context.MODE_PRIVATE).edit()
+        val editor = context.getSharedPreferences("sound_booster_per_style_v7", Context.MODE_PRIVATE).edit()
         for (cIdx in 0..5) {
             editor.putInt("s_${idx}_c_$cIdx", cfg.colors[cIdx])
         }
@@ -284,6 +291,7 @@ object SliderThemeManager {
             .putInt("s_${idx}_txt_s", cfg.textSizeSp)
             .putInt("s_${idx}_ex1", cfg.extraParam1)
             .putInt("s_${idx}_ex2", cfg.extraParam2)
+            .putBoolean("s_${idx}_out_dismiss", cfg.dismissOnOutsideTouch)
             .apply()
     }
 
@@ -428,13 +436,11 @@ class TrueColorWheelView(context: Context) : View(context) {
 
 // =========================================================================
 // 3. מנוע ציור סמלים תואמי ערכת נושא לכל הערוצים + סמל בלוטות' קטן צמוד לרמקול
-//    ערוצים: 0 = מדיה/רמקול, 1 = עוצמת צלצול, 2 = התראות, 3 = שעון מעורר, 4 = שיחת טלפון
 // =========================================================================
 object VectorIconRenderer {
     private val iconPath = Path()
     private val arcRect = RectF()
 
-    // מצייר אוטומטית את הסמל של הערוץ שאותו מתאימים כרגע, בעיצוב התואם למחוון הפעיל!
     fun drawActiveStreamIcon(
         canvas: Canvas,
         cx: Float,
@@ -448,7 +454,6 @@ object VectorIconRenderer {
         paint: Paint
     ) {
         when (streamType) {
-            // 0: מדיה (רמקול + סמל בלוטות' קטן לידו אם המכשיר מחובר לבלוטות'!)
             0 -> {
                 val shiftX = if (isBluetoothConnected) -size * 0.14f else 0f
                 drawStyledSpeakerIcon(canvas, cx + shiftX, cy, size, color, styleIndex, volumePercent, paint)
@@ -464,13 +469,9 @@ object VectorIconRenderer {
                     )
                 }
             }
-            // 1: עוצמת צלצול (פעמון מצלצל עם גלי תהודה בצדדים)
             1 -> drawThemedRingVolumeIcon(canvas, cx, cy, size, color, styleIndex, paint)
-            // 2: התראות (פעמון התראות / בועת הודעה מותאמת לערכת הנושא)
             2 -> drawThemedNotificationIcon(canvas, cx, cy, size, color, styleIndex, paint)
-            // 3: שעון מעורר (שעון עם שני פעמונים עליונים ומחוגים)
             3 -> drawThemedAlarmIcon(canvas, cx, cy, size, color, styleIndex, paint)
-            // 4: שיחת טלפון (שפופרת טלפון עם גלי קול)
             else -> {
                 drawThemedPhoneCallIcon(canvas, cx, cy, size, color, styleIndex, paint)
                 if (isBluetoothConnected) {
@@ -488,7 +489,6 @@ object VectorIconRenderer {
         }
     }
 
-    // סמל בלוטות' קטן וחד ליד סמל הרמקול במקרה שהמכשיר מחובר לבלוטות'
     fun drawMiniBluetoothBadge(
         canvas: Canvas,
         bx: Float,
@@ -506,7 +506,6 @@ object VectorIconRenderer {
         paint.color = color
 
         if (styleIndex == 8) {
-            // סמל בלוטות' מפוקסל 8-Bit
             paint.style = Paint.Style.FILL
             val u = bSize * 0.16f
             canvas.drawRect(bx - u * 0.5f, by - 3 * u, bx + u * 0.5f, by + 3 * u, paint)
@@ -515,7 +514,6 @@ object VectorIconRenderer {
             canvas.drawRect(bx - 2 * u, by - 1.5f * u, bx - u * 0.5f, by - 0.5f * u, paint)
             canvas.drawRect(bx - 2 * u, by + 0.5f * u, bx - u * 0.5f, by + 1.5f * u, paint)
         } else {
-            // רונת ה-Bluetooth הווקטורית הקלאסית (B זוויתי)
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = (bSize * 0.14f).coerceAtLeast(1.8f)
             paint.strokeCap = Paint.Cap.ROUND
@@ -539,7 +537,6 @@ object VectorIconRenderer {
         paint.strokeCap = prevCap
     }
 
-    // סמל עוצמת צלצול (פעמון עם קשתות צלצול משני הצדדים) מותאם לערכת הנושא
     fun drawThemedRingVolumeIcon(
         canvas: Canvas,
         cx: Float,
@@ -555,14 +552,12 @@ object VectorIconRenderer {
         paint.color = color
 
         if (styleIndex == 8) {
-            // פעמון צלצול 8-Bit מפוקסל
             paint.style = Paint.Style.FILL
             val u = size * 0.14f
             canvas.drawRect(cx - u, cy - 3 * u, cx + u, cy - 2 * u, paint)
             canvas.drawRect(cx - 2 * u, cy - 2 * u, cx + 2 * u, cy + u, paint)
             canvas.drawRect(cx - 3 * u, cy + u, cx + 3 * u, cy + 2 * u, paint)
             canvas.drawRect(cx - u * 0.7f, cy + 2.3f * u, cx + u * 0.7f, cy + 3.3f * u, paint)
-            // קווי רטט צלצול בצדדים
             canvas.drawRect(cx - 4.2f * u, cy - 2 * u, cx - 3.3f * u, cy, paint)
             canvas.drawRect(cx + 3.3f * u, cy - 2 * u, cx + 4.2f * u, cy, paint)
         } else {
@@ -583,7 +578,6 @@ object VectorIconRenderer {
             iconPath.close()
             canvas.drawPath(iconPath, paint)
 
-            // גלי צלצול משמאל ומימין לפעמון
             arcRect.set(cx - w * 1.65f, cy - size * 0.24f, cx - w * 0.65f, cy + size * 0.12f)
             canvas.drawArc(arcRect, 135f, 90f, false, paint)
             arcRect.set(cx + w * 0.65f, cy - size * 0.24f, cx + w * 1.65f, cy + size * 0.12f)
@@ -597,7 +591,6 @@ object VectorIconRenderer {
         paint.strokeWidth = prevStroke
     }
 
-    // סמל התראות (פעמון התראות נקי עם נקודת חיווי עליונה) מותאם לערכת הנושא
     fun drawThemedNotificationIcon(
         canvas: Canvas,
         cx: Float,
@@ -637,7 +630,6 @@ object VectorIconRenderer {
 
             paint.style = Paint.Style.FILL
             canvas.drawCircle(cx, botY + size * 0.11f, size * 0.085f, paint)
-            // נקודת התראה (Badge Dot) בפינה הימנית העליונה של הפעמון
             canvas.drawCircle(cx + w * 0.78f, topY + size * 0.08f, size * 0.10f, paint)
         }
 
@@ -645,7 +637,6 @@ object VectorIconRenderer {
         paint.strokeWidth = prevStroke
     }
 
-    // סמל שעון מעורר מותאם לערכת הנושא
     fun drawThemedAlarmIcon(
         canvas: Canvas,
         cx: Float,
@@ -674,10 +665,8 @@ object VectorIconRenderer {
 
             val r = size * 0.34f
             canvas.drawCircle(cx, cy + size * 0.04f, r, paint)
-            // מחוגי השעון
             canvas.drawLine(cx, cy + size * 0.04f, cx, cy - size * 0.14f, paint)
             canvas.drawLine(cx, cy + size * 0.04f, cx + size * 0.14f, cy + size * 0.04f, paint)
-            // שני פעמונים מעל השעון
             canvas.drawLine(cx - r * 0.88f, cy - r * 0.62f, cx - r * 0.38f, cy - r * 0.96f, paint)
             canvas.drawLine(cx + r * 0.88f, cy - r * 0.62f, cx + r * 0.38f, cy - r * 0.96f, paint)
         }
@@ -686,7 +675,6 @@ object VectorIconRenderer {
         paint.strokeWidth = prevStroke
     }
 
-    // סמל שיחת טלפון מותאם לערכת הנושא
     fun drawThemedPhoneCallIcon(
         canvas: Canvas,
         cx: Float,
@@ -818,13 +806,15 @@ object VectorIconRenderer {
 }
 
 // =========================================================================
-// 4. תצוגת המחוון הצף (כל הסגנונות מציגים את סמל הערוץ הפעיל + בלוטות' צמוד!)
+// 4. תצוגת המחוון הצף + מנוע אנימציות הופעה והיעלמות מותאם לכל אחד מ-18 המחוונים
+//    + תמיכה בסגירה מיידית וחלקה בנגיעה מחוץ למחוון (ACTION_OUTSIDE)
 // =========================================================================
 class CustomThemedSliderOverlayView(
     context: Context,
     private val onVolumeDragged: (Int) -> Unit,
     private val onPositionDragged: (Int, Int) -> Unit,
-    private val onFinishEditClicked: () -> Unit
+    private val onFinishEditClicked: () -> Unit,
+    private val onOutsideTouchDismiss: () -> Unit
 ) : View(context) {
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -839,6 +829,7 @@ class CustomThemedSliderOverlayView(
     private var lastRawX = 0f
     private var lastRawY = 0f
     private var lastNonZeroVolume = 100
+    var isAnimatingExit = false
 
     private fun dp(value: Float): Float {
         return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, resources.displayMetrics)
@@ -853,13 +844,122 @@ class CustomThemedSliderOverlayView(
         return Color.argb(a, Color.red(color), Color.green(color), Color.blue(color))
     }
 
+    // =====================================================================
+    // אנימציית הופעה מותאמת אישית לכל אחד מ-18 המחוונים
+    // =====================================================================
+    fun playCustomEnterAnimation(styleIdx: Int = AudioEngine.sliderStyleIndex) {
+        animate().cancel()
+        isAnimatingExit = false
+        val cfg = SliderThemeManager.getCurrentConfig()
+        val fromRight = cfg.posXPercent >= 50
+        val sideSlidePx = dp(if (fromRight) 75f else -75f)
+
+        alpha = 0f
+        when (styleIdx) {
+            // בר עליון (13) ואנדרואיד אופקי (3): החלקה מלמעלה עם קפיציות רכה
+            3, 13 -> {
+                translationX = 0f
+                translationY = -dp(65f)
+                scaleX = 0.92f
+                scaleY = 0.92f
+                animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .setDuration(290L)
+                    .setInterpolator(OvershootInterpolator(1.1f))
+                    .setListener(null)
+                    .start()
+            }
+            // חוגת אולפן (5) וארקייד 8-Bit (8): אפקט Pop-In ממרכז האלמנט
+            5, 8 -> {
+                translationX = 0f
+                translationY = 0f
+                scaleX = 0.55f
+                scaleY = 0.55f
+                animate()
+                    .alpha(1f)
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .setDuration(270L)
+                    .setInterpolator(OvershootInterpolator(1.35f))
+                    .setListener(null)
+                    .start()
+            }
+            // סייבר ניאון (4) וטלמטריית HUD (15): פתיחה טכנולוגית אנכית (Cyber Unfold)
+            4, 15 -> {
+                translationX = sideSlidePx * 0.45f
+                translationY = 0f
+                scaleX = 0.88f
+                scaleY = 0.25f
+                animate()
+                    .alpha(1f)
+                    .translationX(0f)
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .setDuration(260L)
+                    .setInterpolator(DecelerateInterpolator(1.6f))
+                    .setListener(null)
+                    .start()
+            }
+            // קפסולות, זכוכית חלבית וקשת צבעים (1, 2, 6, 7, 9, 10, 11, 12, 14, 16, 17): גלישה מהצד עם זום אלגנטי
+            else -> {
+                translationX = sideSlidePx
+                translationY = 0f
+                scaleX = 0.85f
+                scaleY = 0.90f
+                animate()
+                    .alpha(1f)
+                    .translationX(0f)
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .setDuration(280L)
+                    .setInterpolator(OvershootInterpolator(0.95f))
+                    .setListener(null)
+                    .start()
+            }
+        }
+    }
+
+    // =====================================================================
+    // אנימציית היעלמות חלקה מותאמת לכל מחוון (נקראת בסיום הטיימר או בנגיעה מחוץ למחוון)
+    // =====================================================================
+    fun playCustomExitAnimation(styleIdx: Int = AudioEngine.sliderStyleIndex, onComplete: () -> Unit) {
+        if (isAnimatingExit) return
+        isAnimatingExit = true
+        animate().cancel()
+
+        val cfg = SliderThemeManager.getCurrentConfig()
+        val toRight = cfg.posXPercent >= 50
+        val sideSlidePx = dp(if (toRight) 70f else -70f)
+
+        val anim = animate().alpha(0f).setDuration(210L).setInterpolator(AccelerateInterpolator(1.3f))
+        when (styleIdx) {
+            3, 13 -> anim.translationY(-dp(55f)).scaleX(0.92f).scaleY(0.92f)
+            5, 8 -> anim.scaleX(0.60f).scaleY(0.60f)
+            4, 15 -> anim.translationX(sideSlidePx * 0.4f).scaleY(0.25f).scaleX(0.85f)
+            else -> anim.translationX(sideSlidePx).scaleX(0.86f).scaleY(0.90f)
+        }
+
+        anim.setListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) {
+                isAnimatingExit = false
+                onComplete()
+            }
+
+            override fun onAnimationCancel(animation: Animator) {
+                isAnimatingExit = false
+            }
+        }).start()
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val w = width.toFloat()
         val h = height.toFloat()
         if (w <= 0f || h <= 0f) return
 
-        // מרענן זיהוי חיבור בלוטות' וערוץ פעיל בזמן אמת לפני כל ציור
         AudioEngine.refreshBluetoothAndStreamState(context)
 
         val cfg = SliderThemeManager.getCurrentConfig()
@@ -1374,7 +1474,6 @@ class CustomThemedSliderOverlayView(
     private fun handleInteractiveOverlayButtonClick(x: Float, y: Float): Boolean {
         val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return false
 
-        // 0. לחיצה על סמל הערוץ במחוון -> מחליפה בין מדיה / צלצול / התראות / שעון מעורר / טלפון!
         if (ExtendedSkinsRenderer.hitStreamCycleButton.contains(x, y)) {
             AudioEngine.cycleNextStream(context)
             Toast.makeText(
@@ -1386,7 +1485,6 @@ class CustomThemedSliderOverlayView(
             return true
         }
 
-        // 1. כפתור רמקול משני (או החלפת ערוץ בסגנון 16)
         if (ExtendedSkinsRenderer.hitSpeakerButton.contains(x, y)) {
             AudioEngine.cycleNextStream(context)
             Toast.makeText(
@@ -1398,7 +1496,6 @@ class CustomThemedSliderOverlayView(
             return true
         }
 
-        // 2. כפתור רטט
         if (ExtendedSkinsRenderer.hitVibrateButton.contains(x, y)) {
             runCatching { am.ringerMode = AudioManager.RINGER_MODE_VIBRATE }
             runCatching {
@@ -1415,7 +1512,6 @@ class CustomThemedSliderOverlayView(
             return true
         }
 
-        // 3. כפתור השתק
         if (ExtendedSkinsRenderer.hitMuteButton.contains(x, y)) {
             if (AudioEngine.currentTotalVolume > 0) {
                 lastNonZeroVolume = AudioEngine.currentTotalVolume
@@ -1434,7 +1530,6 @@ class CustomThemedSliderOverlayView(
             return true
         }
 
-        // 4. כפתור Play/Pause
         if (ExtendedSkinsRenderer.hitPlayPauseButton.contains(x, y)) {
             runCatching {
                 val downEvent = KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
@@ -1446,7 +1541,6 @@ class CustomThemedSliderOverlayView(
             return true
         }
 
-        // 5. כפתור החלפת צד מסך ⇄
         if (ExtendedSkinsRenderer.hitSwapSideButton.contains(x, y)) {
             val cfg = SliderThemeManager.getCurrentConfig()
             cfg.posXPercent = if (cfg.posXPercent >= 50) 6 else 94
@@ -1460,6 +1554,14 @@ class CustomThemedSliderOverlayView(
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        // זיהוי נגיעה מחוץ למחוון (FLAG_WATCH_OUTSIDE_TOUCH): מעלים מיד את המחוון והטשטוש באנימציה חלקה!
+        if (event.actionMasked == MotionEvent.ACTION_OUTSIDE) {
+            if (!isEditPositionMode && SliderThemeManager.getCurrentConfig().dismissOnOutsideTouch) {
+                onOutsideTouchDismiss()
+            }
+            return false
+        }
+
         if (isEditPositionMode) {
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
