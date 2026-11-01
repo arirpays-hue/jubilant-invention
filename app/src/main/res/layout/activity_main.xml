@@ -97,7 +97,7 @@
                 android:layout_height="42dp"
                 android:layout_marginEnd="4dp"
                 android:backgroundTint="#00000000"
-                android:text="איכות HD"
+                android:text="איכות HD ושירים"
                 android:textColor="#A0AAB8"
                 android:textSize="12sp"
                 android:textStyle="bold"
@@ -153,7 +153,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content">
 
-            <!-- ================= קטגוריה 1: עוצמה ומחוון מערכת ================= -->
+            <!-- ================= קטגוריה 1: עוצמה, מצב מחוון בלבד והגברת 300% ================= -->
             <LinearLayout
                 android:id="@+id/sectionVolume"
                 android:layout_width="match_parent"
@@ -189,6 +189,7 @@
                                 android:orientation="vertical">
 
                                 <TextView
+                                    android:id="@+id/tvVolumeCardTitle"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="עוצמת שמע ראשית (0% - 200%)"
@@ -252,7 +253,7 @@
                                 android:layout_weight="1"
                                 android:text="השתק"
                                 android:textColor="#A0AAB8"
-                                android:textSize="11sp"
+                                android:textSize="10sp"
                                 app:cornerRadius="12dp"
                                 app:strokeColor="#3A465E" />
 
@@ -265,7 +266,7 @@
                                 android:layout_weight="1"
                                 android:text="100%"
                                 android:textColor="#FFFFFF"
-                                android:textSize="11sp"
+                                android:textSize="10sp"
                                 app:cornerRadius="12dp"
                                 app:strokeColor="#3A465E" />
 
@@ -278,7 +279,7 @@
                                 android:layout_weight="1"
                                 android:text="150%"
                                 android:textColor="#FFD740"
-                                android:textSize="11sp"
+                                android:textSize="10sp"
                                 app:cornerRadius="12dp"
                                 app:strokeColor="#FFD740" />
 
@@ -287,13 +288,110 @@
                                 style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                                 android:layout_width="0dp"
                                 android:layout_height="44dp"
+                                android:layout_marginEnd="4dp"
                                 android:layout_weight="1"
-                                android:text="200% MAX"
-                                android:textColor="#FF5252"
-                                android:textSize="11sp"
+                                android:text="200%"
+                                android:textColor="#FF9100"
+                                android:textSize="10sp"
                                 app:cornerRadius="12dp"
-                                app:strokeColor="#FF5252" />
+                                app:strokeColor="#FF9100" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnVol300"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="0dp"
+                                android:layout_height="44dp"
+                                android:layout_weight="1.15"
+                                android:text="300% MAX"
+                                android:textColor="#FF1744"
+                                android:textSize="10sp"
+                                android:visibility="gone"
+                                app:cornerRadius="12dp"
+                                app:strokeColor="#FF1744" />
                         </LinearLayout>
+
+                        <!-- הפרדת מצבים: הגברה עד 300% + מצב עיצוב מחוון בלבד ללא הגברה -->
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginVertical="14dp"
+                            android:background="#263042" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="4dp">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="אפשר הגברת טורבו עד 300% (Extreme Boost)"
+                                    android:textColor="#FF5252"
+                                    android:textSize="13sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="פותח את תקרת ההגברה מ-200% ל-300% עם הגנת Anti-Clip"
+                                    android:textColor="#A0AAB8"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+
+                            <androidx.appcompat.widget.SwitchCompat
+                                android:id="@+id/switchAllow300Boost"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:checked="false"
+                                app:thumbTint="#FF5252" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="4dp">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="מצב עיצוב מחוון בלבד (כבה הגברת קול)"
+                                    android:textColor="#00E5FF"
+                                    android:textSize="13sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="מכבה את הגברת הסאונד מעל 100% ומשתמש באפליקציה רק לעיצוב מחוון הווליום"
+                                    android:textColor="#A0AAB8"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+
+                            <androidx.appcompat.widget.SwitchCompat
+                                android:id="@+id/switchSliderOnlyMode"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:checked="false"
+                                app:thumbTint="#00E5FF" />
+                        </LinearLayout>
+
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
@@ -323,7 +421,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="4dp"
-                            android:text="מאפשר להגביר עד 200% מכפתורי הווליום הפיזיים בכל מסך ללא לופים וללא פגיעה בעוזרות קוליות."
+                            android:text="תומך בלחיצה רציפה על כפתורי הווליום, אינו מפריע לצילום מסך, ופועל גם במצב עיצוב מחוון בלבד או בהגברה עד 300%."
                             android:textColor="#D0D8E8"
                             android:textSize="12sp" />
 
@@ -341,7 +439,7 @@
                 </com.google.android.material.card.MaterialCardView>
             </LinearLayout>
 
-            <!-- ================= קטגוריה 2: שיפור איכות הצליל (HD DSP) ================= -->
+            <!-- ================= קטגוריה 2: שיפור איכות הצליל + מנוע שיפור שירים לאיכות הגבוהה ביותר ================= -->
             <LinearLayout
                 android:id="@+id/sectionQuality"
                 android:layout_width="match_parent"
@@ -349,6 +447,7 @@
                 android:orientation="vertical"
                 android:visibility="gone">
 
+                <!-- כרטיס 1: מנוע HD DSP המקורי -->
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -405,7 +504,7 @@
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="מגן על איכות הצליל והרמקול בעוצמות של 100%-200%"
+                                    android:text="מגן על איכות הצליל והרמקול בעוצמות של 100%-300%"
                                     android:textColor="#A0AAB8"
                                     android:textSize="11sp" />
                             </LinearLayout>
@@ -527,6 +626,171 @@
 
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
+
+                <!-- כרטיס 2 חדש: מנוע מאסטרינג ושיפור שירים לאיכות הגבוהה ביותר (Ultra Hi-Fi Song Remaster) -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="20dp"
+                    app:cardBackgroundColor="#161B26"
+                    app:cardCornerRadius="24dp"
+                    app:strokeColor="#FFD740"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="20dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="מנוע שיפור שירים לאיכות שיא (Ultra Hi-Fi 32-Bit)"
+                                    android:textColor="#FFD740"
+                                    android:textSize="15sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="משחזר תדרים דחוסים ביוטיוב/ספוטיפיי, מפריד בין כלי הנגינה ומוסיף פאנץ' אולפני נקי"
+                                    android:textColor="#A0AAB8"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+
+                            <androidx.appcompat.widget.SwitchCompat
+                                android:id="@+id/switchSongRemaster"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:checked="true"
+                                app:thumbTint="#FFD740" />
+                        </LinearLayout>
+
+                        <!-- 1. שחזור תדרים דחוסים -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="14dp"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="Lossless Upscaler (שחזור פרטים ותדרי אוויר)"
+                                android:textColor="#FFFFFF"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvSongUpscaleValue"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="75%"
+                                android:textColor="#FFD740"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <SeekBar
+                            android:id="@+id/seekSongUpscale"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:max="100"
+                            android:progress="75"
+                            android:progressTint="#FFD740"
+                            android:thumbTint="#FFD740" />
+
+                        <!-- 2. הפרדת כלים ובמה אקוסטית -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="14dp"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="Instrument Separation (הפרדת שירה וכלים)"
+                                android:textColor="#FFFFFF"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvSongSeparationValue"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="65%"
+                                android:textColor="#00E5FF"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <SeekBar
+                            android:id="@+id/seekSongSeparation"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:max="100"
+                            android:progress="65"
+                            android:progressTint="#00E5FF"
+                            android:thumbTint="#00E5FF" />
+
+                        <!-- 3. דינמיקת באס ופאנץ' אולפני -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="14dp"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="Studio Sub-Punch (הידוק באס עמוק ונקי)"
+                                android:textColor="#FFFFFF"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvSongPunchValue"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="60%"
+                                android:textColor="#BB86FC"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <SeekBar
+                            android:id="@+id/seekSongPunch"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:max="100"
+                            android:progress="60"
+                            android:progressTint="#BB86FC"
+                            android:thumbTint="#BB86FC" />
+
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
             </LinearLayout>
 
             <!-- ================= קטגוריה 3: אפקטים אקוסטיים (3D & Bass) ================= -->
@@ -770,7 +1034,7 @@
                 </com.google.android.material.card.MaterialCardView>
             </LinearLayout>
 
-            <!-- ================= קטגוריה 5: עיצוב מחוון עוצמת הקול (מותאם לכל מחוון בנפרד) ================= -->
+            <!-- ================= קטגוריה 5: עיצוב מחוון עוצמת הקול (15 סגנונות מותאמים) ================= -->
             <LinearLayout
                 android:id="@+id/sectionSliderDesign"
                 android:layout_width="match_parent"
@@ -809,7 +1073,7 @@
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="סגנון מחוון (מותאם אישית לכל מחוון)"
+                                    android:text="סגנון מחוון (15 עיצובים מותאמים אישית)"
                                     android:textColor="#FFFFFF"
                                     android:textSize="15sp"
                                     android:textStyle="bold" />
@@ -891,7 +1155,6 @@
                             android:textColor="#A0AAB8"
                             android:textSize="11sp" />
 
-                        <!-- מיכל דינמי לכפתורי הצבע של המחוון הנוכחי (בין 3 ל-6 צבעים לפי סוג המחוון) -->
                         <HorizontalScrollView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -979,7 +1242,7 @@
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
-                <!-- 3. התאמת אלמנטים פנימיים ייחודיים למחוון הנוכחי (מסגרת, סמל, גופן, רכיבים) -->
+                <!-- 3. התאמת אלמנטים פנימיים ייחודיים למחוון הנוכחי -->
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -1004,7 +1267,6 @@
                             android:textSize="16sp"
                             android:textStyle="bold" />
 
-                        <!-- עובי מסגרת (מוצג רק אם למחוון יש מסגרת) -->
                         <LinearLayout
                             android:id="@+id/layoutBorderControl"
                             android:layout_width="match_parent"
@@ -1046,7 +1308,6 @@
                                 android:thumbTint="#FFD740" />
                         </LinearLayout>
 
-                        <!-- רדיוס עיגול פינות (מוצג אם רלוונטי למחוון) -->
                         <LinearLayout
                             android:id="@+id/layoutCornerControl"
                             android:layout_width="match_parent"
@@ -1088,7 +1349,6 @@
                                 android:thumbTint="#FFD740" />
                         </LinearLayout>
 
-                        <!-- גודל סמל וקטורי (מוצג אם יש סמל במחוון) -->
                         <LinearLayout
                             android:id="@+id/layoutIconControl"
                             android:layout_width="match_parent"
@@ -1130,7 +1390,6 @@
                                 android:thumbTint="#00E5FF" />
                         </LinearLayout>
 
-                        <!-- גודל טקסט אחוזים -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -1165,7 +1424,6 @@
                             android:progressTint="#00E676"
                             android:thumbTint="#00E676" />
 
-                        <!-- אלמנט ייחודי 1 של המחוון הנוכחי -->
                         <LinearLayout
                             android:id="@+id/layoutExtraParam1"
                             android:layout_width="match_parent"
@@ -1208,7 +1466,6 @@
                                 android:thumbTint="#BB86FC" />
                         </LinearLayout>
 
-                        <!-- אלמנט ייחודי 2 של המחוון הנוכחי -->
                         <LinearLayout
                             android:id="@+id/layoutExtraParam2"
                             android:layout_width="match_parent"
@@ -1253,7 +1510,7 @@
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
-                <!-- 4. שקיפות מחוון, טשטוש מסך והשחרת רקע (ללא חסימת מגע במסך!) -->
+                <!-- 4. שקיפות מחוון, טשטוש מסך והשחרת רקע -->
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -1458,7 +1715,7 @@
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
-                <!-- 5. התאמת מיקום במסך, אורך, רוחב ומצב גרירה חיה עם כפתור סיום מובנה -->
+                <!-- 5. התאמת מיקום במסך, אורך, רוחב ומצב גרירה חיה -->
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
