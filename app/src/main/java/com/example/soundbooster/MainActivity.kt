@@ -39,7 +39,7 @@ import com.google.android.material.card.MaterialCardView
 import kotlin.math.roundToInt
 
 // =========================================================================
-// 1. מנוע סאונד בטוח + רשימת כל 21 סגנונות המחוון
+// 1. מנוע סאונד + מנוע מאסטרינג לשירים (32-Bit Remaster) + הגברה עד 300% + מצב מחוון בלבד
 // =========================================================================
 object AudioEngine {
     var loudnessEnhancer: LoudnessEnhancer? = null
@@ -50,10 +50,23 @@ object AudioEngine {
 
     var currentTotalVolume: Int = 100
     var isBoosterActive: Boolean = true
+
+    // מצב שימוש במחוון המעוצב בלבד ללא הגברת קול (Visual Slider Only)
+    var sliderOnlyNoBoostMode: Boolean = false
+
+    // אפשרות לפתיחת הגברה עד 300%
+    var allow300PercentBoost: Boolean = false
+
     var antiClippingEnabled: Boolean = true
     var hiResOptimizerEnabled: Boolean = true
     var clarityLevel: Int = 50
     var warmthLevel: Int = 40
+
+    // מנוע שיפור שירים לאיכות שיא (Ultra Hi-Fi Song Remaster Engine)
+    var songRemasterEnabled: Boolean = true
+    var songUpscaleLevel: Int = 75       // שחזור תדרים דחוסים (Air & Treble Harmonics)
+    var songSeparationLevel: Int = 65    // הפרדת כלים ובמה אקוסטית (3D Stereo Separation)
+    var songPunchLevel: Int = 60         // הידוק באס ופאנץ' אולפני (Sub-Bass Tightness)
 
     var sliderStyleIndex: Int = 1
 
@@ -61,6 +74,7 @@ object AudioEngine {
     var bootCooldownUntil: Long = 0L
     private var playbackCallbackRegistered = false
 
+    // 15 סגנונות המחוון המסודרים מחדש (0 עד 14) לאחר הסרת המחוונים שביקשת
     val styleNames = listOf(
         "0. מחוון המערכת המקורי של המכשיר (Native SystemUI)",
         "1. עיצוב הזכוכית היוקרתי (Glassmorphism)",
@@ -72,23 +86,32 @@ object AudioEngine {
         "7. קפסולת iOS מודרנית (Cupertino Pill)",
         "8. רטרו ארקייד 8-Bit (Pixel Blocks)",
         "9. תאורת קצה מסך (Edge Glow Bar)",
-        "10. מטריצת נוריות אולפן (LED Matrix 200%)",
-        "11. קפסולת גרדיאנט מפוצלת + תפריט (Split Gradient Pill)",
-        "12. אנדרואיד 12 מנטה מודולרי (Material You Mint Split)",
-        "13. פאנל 4 ערוצי ניאון גמיש (4-Channel Neon Matrix)",
-        "14. כרטיסיית 4 עמודות RGB צבעוניות (Colorful Themes Card)",
-        "15. קפסולה לבנה דקה + כפתור Play (Slim Red Accent Pill)",
-        "16. פאנל מחוונים אופקיים מלא (Multi-Stream Volume Panel)",
-        "17. אולפן זהב כהה אנכי (Golden Thin Track & Knob)",
-        "18. מיקסר כחול עמוק 6 ערוצים (Deep Blue Line Mixer)",
-        "19. בר עליון צמוד קצה עם תו מוזיקה (Top Status Bar Strip)",
-        "20. קפסולת Windows / Emoji מדורגת (Segmented Cap Pill)"
+        "10. מטריצת נוריות אולפן (LED Matrix)",
+        "11. קפסולה לבנה דקה + כפתור Play (Slim Red Accent Pill)",
+        "12. אולפן זהב כהה אנכי (Golden Thin Track & Knob)",
+        "13. בר עליון צמוד קצה עם תו מוזיקה (Top Status Bar Strip)",
+        "14. קפסולת Windows / Emoji מדורגת (Segmented Cap Pill)"
     )
+
+    fun getEffectiveMaxVolume(): Int {
+        return when {
+            sliderOnlyNoBoostMode || !isBoosterActive -> 100
+            allow300PercentBoost -> 300
+            else -> 200
+        }
+    }
 
     fun init(context: Context? = null) {
         context?.let {
             val prefs = it.getSharedPreferences("sound_booster_hd", Context.MODE_PRIVATE)
-            currentTotalVolume = prefs.getInt("saved_vol", currentTotalVolume)
+            sliderOnlyNoBoostMode = prefs.getBoolean("slider_only_mode", sliderOnlyNoBoostMode)
+            allow300PercentBoost = prefs.getBoolean("allow_300_boost", allow300PercentBoost)
+            songRemasterEnabled = prefs.getBoolean("song_remaster_en", songRemasterEnabled)
+            songUpscaleLevel = prefs.getInt("song_upscale", songUpscaleLevel)
+            songSeparationLevel = prefs.getInt("song_sep", songSeparationLevel)
+            songPunchLevel = prefs.getInt("song_punch", songPunchLevel)
+
+            currentTotalVolume = prefs.getInt("saved_vol", currentTotalVolume).coerceIn(0, getEffectiveMaxVolume())
             sliderStyleIndex = prefs.getInt("slider_style", sliderStyleIndex).coerceIn(0, styleNames.lastIndex)
             SliderThemeManager.loadAllStyleConfigs(it)
             registerAssistantSafeRecovery(it.applicationContext)
@@ -97,31 +120,33 @@ object AudioEngine {
         updateSoundQualityDSP()
     }
 
+    fun saveEngineModes(context: Context) {
+        context.getSharedPreferences("sound_booster_hd", Context.MODE_PRIVATE).edit()
+            .putBoolean("slider_only_mode", sliderOnlyNoBoostMode)
+            .putBoolean("allow_300_boost", allow300PercentBoost)
+            .putBoolean("song_remaster_en", songRemasterEnabled)
+            .putInt("song_upscale", songUpscaleLevel)
+            .putInt("song_sep", songSeparationLevel)
+            .putInt("song_punch", songPunchLevel)
+            .apply()
+    }
+
     private fun ensureAudioEffectsCreated() {
+        val effectsActive = isBoosterActive && !sliderOnlyNoBoostMode
         if (loudnessEnhancer == null) {
-            runCatching {
-                loudnessEnhancer = LoudnessEnhancer(0).apply { enabled = isBoosterActive }
-            }
+            runCatching { loudnessEnhancer = LoudnessEnhancer(0).apply { enabled = effectsActive } }
         }
         if (equalizer == null) {
-            runCatching {
-                equalizer = Equalizer(0, 0).apply { enabled = isBoosterActive }
-            }
+            runCatching { equalizer = Equalizer(0, 0).apply { enabled = effectsActive } }
         }
         if (bassBoost == null) {
-            runCatching {
-                bassBoost = BassBoost(0, 0).apply { enabled = isBoosterActive }
-            }
+            runCatching { bassBoost = BassBoost(0, 0).apply { enabled = effectsActive } }
         }
         if (virtualizer == null) {
-            runCatching {
-                virtualizer = Virtualizer(0, 0).apply { enabled = isBoosterActive }
-            }
+            runCatching { virtualizer = Virtualizer(0, 0).apply { enabled = effectsActive } }
         }
         if (presetReverb == null) {
-            runCatching {
-                presetReverb = PresetReverb(0, 0).apply { enabled = isBoosterActive }
-            }
+            runCatching { presetReverb = PresetReverb(0, 0).apply { enabled = effectsActive } }
         }
     }
 
@@ -134,7 +159,10 @@ object AudioEngine {
             am.registerAudioPlaybackCallback(object : AudioManager.AudioPlaybackCallback() {
                 override fun onPlaybackConfigChanged(configs: MutableList<AudioPlaybackConfiguration>?) {
                     super.onPlaybackConfigChanged(configs)
-                    if (!isBoosterActive) return
+                    if (!isBoosterActive || sliderOnlyNoBoostMode) {
+                        runCatching { loudnessEnhancer?.setTargetGain(0) }
+                        return
+                    }
                     val mode = am.mode
                     if (mode == AudioManager.MODE_IN_COMMUNICATION || mode == AudioManager.MODE_IN_CALL) {
                         runCatching { loudnessEnhancer?.setTargetGain(0) }
@@ -147,9 +175,14 @@ object AudioEngine {
     }
 
     private fun reapplyCurrentGainSafely() {
-        if (!isBoosterActive) return
+        if (!isBoosterActive || sliderOnlyNoBoostMode) {
+            runCatching { loudnessEnhancer?.setTargetGain(0) }
+            return
+        }
         val extra = (currentTotalVolume - 100).coerceAtLeast(0)
-        val cleanGain = if (antiClippingEnabled) (extra * 18) else (extra * 26)
+        // מדרג הגברה חכם התומך גם עד 300% עם שמירה על צליל נקי
+        val factor = if (antiClippingEnabled) 17 else 24
+        val cleanGain = extra * factor
         runCatching {
             loudnessEnhancer?.enabled = true
             loudnessEnhancer?.setTargetGain(cleanGain)
@@ -166,34 +199,70 @@ object AudioEngine {
             .edit().putInt("slider_style", sliderStyleIndex).apply()
     }
 
+    // משלב את מנוע ה-HD עם מנוע שיפור השירים (Song Remaster Engine)
     fun updateSoundQualityDSP() {
+        if (!isBoosterActive || sliderOnlyNoBoostMode) return
         val eq = equalizer ?: return
+
         runCatching {
             val bands = eq.numberOfBands.toInt()
             if (bands < 3) return
             val maxEQ = eq.bandLevelRange[1].toInt()
+            val minEQ = eq.bandLevelRange[0].toInt()
+
+            var lowBandGain = 0f
+            var midCutGain = 0f
+            var presenceGain = 0f
+            var airHighGain = 0f
 
             if (hiResOptimizerEnabled) {
-                val warmthBoost = ((warmthLevel / 100f) * (maxEQ * 0.35f)).toInt().toShort()
-                val clarityBoost = ((clarityLevel / 100f) * (maxEQ * 0.45f)).toInt().toShort()
-                eq.setBandLevel(0, warmthBoost)
-                eq.setBandLevel((bands - 1).toShort(), clarityBoost)
+                lowBandGain += (warmthLevel / 100f) * (maxEQ * 0.28f)
+                airHighGain += (clarityLevel / 100f) * (maxEQ * 0.35f)
             }
+
+            if (songRemasterEnabled) {
+                // 1. שחזור תדרים גבוהים דחוסים (Upscaler)
+                airHighGain += (songUpscaleLevel / 100f) * (maxEQ * 0.42f)
+                // 2. הפרדת כלים ושירה (ניקוי עכירות בתדרי אמצע-נמוך והרמת נוכחות)
+                midCutGain -= (songSeparationLevel / 100f) * (maxEQ * 0.18f)
+                presenceGain += (songSeparationLevel / 100f) * (maxEQ * 0.32f)
+                // 3. פאנץ' באס אולפני (Sub-Punch)
+                lowBandGain += (songPunchLevel / 100f) * (maxEQ * 0.34f)
+
+                // העשרת במת הסטריאו והבאס הפיזי בהתאם למנוע השירים
+                val targetVirt = ((songSeparationLevel / 100f) * 650).toInt().toShort()
+                val targetBass = ((songPunchLevel / 100f) * 550).toInt().toShort()
+                runCatching { virtualizer?.setStrength(targetVirt) }
+                runCatching { bassBoost?.setStrength(targetBass) }
+            }
+
+            eq.setBandLevel(0, lowBandGain.toInt().coerceIn(minEQ, maxEQ).toShort())
+            if (bands >= 4) {
+                eq.setBandLevel(1, midCutGain.toInt().coerceIn(minEQ, maxEQ).toShort())
+                eq.setBandLevel((bands - 2).toShort(), presenceGain.toInt().coerceIn(minEQ, maxEQ).toShort())
+            }
+            eq.setBandLevel((bands - 1).toShort(), airHighGain.toInt().coerceIn(minEQ, maxEQ).toShort())
         }
     }
 
     fun setEnabled(enabled: Boolean) {
         isBoosterActive = enabled
-        runCatching { loudnessEnhancer?.enabled = enabled }
-        runCatching { equalizer?.enabled = enabled }
-        runCatching { bassBoost?.enabled = enabled }
-        runCatching { virtualizer?.enabled = enabled }
-        runCatching { presetReverb?.enabled = enabled }
+        val effectsShouldRun = enabled && !sliderOnlyNoBoostMode
+        runCatching {
+            if (!effectsShouldRun) loudnessEnhancer?.setTargetGain(0)
+            loudnessEnhancer?.enabled = effectsShouldRun
+        }
+        runCatching { equalizer?.enabled = effectsShouldRun }
+        runCatching { bassBoost?.enabled = effectsShouldRun }
+        runCatching { virtualizer?.enabled = effectsShouldRun }
+        runCatching { presetReverb?.enabled = effectsShouldRun }
     }
 
     fun applyVolume(context: Context, totalPercent: Int, showNativeSystemUI: Boolean = false) {
         ensureAudioEffectsCreated()
-        currentTotalVolume = totalPercent.coerceIn(0, 200)
+        val maxAllowed = getEffectiveMaxVolume()
+        currentTotalVolume = totalPercent.coerceIn(0, maxAllowed)
+
         context.getSharedPreferences("sound_booster_hd", Context.MODE_PRIVATE)
             .edit().putInt("saved_vol", currentTotalVolume).apply()
 
@@ -205,8 +274,9 @@ object AudioEngine {
 
         isInternalVolumeChange = true
         try {
-            if (currentTotalVolume <= 100) {
-                val sysTarget = ((currentTotalVolume / 100f) * maxSysVol).roundToInt()
+            if (currentTotalVolume <= 100 || sliderOnlyNoBoostMode || !isBoosterActive) {
+                val safePct = currentTotalVolume.coerceIn(0, 100)
+                val sysTarget = ((safePct / 100f) * maxSysVol).roundToInt()
                 runCatching { audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, sysTarget, flags) }
                 runCatching { loudnessEnhancer?.setTargetGain(0) }
             } else {
@@ -215,6 +285,7 @@ object AudioEngine {
                     runCatching { audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, maxSysVol, flags) }
                 }
                 reapplyCurrentGainSafely()
+                updateSoundQualityDSP()
             }
         } finally {
             Handler(Looper.getMainLooper()).postDelayed({
@@ -233,6 +304,9 @@ class MainActivity : AppCompatActivity() {
     private var maxSystemVolume: Int = 15
 
     private lateinit var seekTotalVolume: SeekBar
+    private lateinit var progressTotalVolume: ProgressBar
+    private lateinit var tvVolumeCardTitle: TextView
+    private lateinit var btnVol300: MaterialButton
     private lateinit var switchEnable: SwitchCompat
     private lateinit var btnEnableSystemSlider: MaterialButton
     private lateinit var btnToggleInteractiveEdit: MaterialButton
@@ -271,6 +345,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         updateServiceButtonState()
         updateEditButtonState(VolumeOverlayService.instance?.isEditModeActive() == true)
+        syncVolumeRangeUI()
         seekTotalVolume.progress = AudioEngine.currentTotalVolume
     }
 
@@ -313,7 +388,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateServiceButtonState() {
         if (VolumeOverlayService.instance != null) {
-            btnEnableSystemSlider.text = "שירות מחוון הווליום (200%) פעיל ומחובר"
+            val maxTxt = AudioEngine.getEffectiveMaxVolume()
+            btnEnableSystemSlider.text = "שירות מחוון הווליום ($maxTxt%) פעיל ומחובר"
             btnEnableSystemSlider.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#00E676"))
         } else {
             btnEnableSystemSlider.text = "הפעל הרחבת מחוון מערכת בהגדרות"
@@ -332,16 +408,48 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // מעדכן את טווח המחוון הראשי בין 100% (מצב מחוון בלבד), 200% (רגיל) או 300% (טורבו)
+    private fun syncVolumeRangeUI() {
+        val maxAllowed = AudioEngine.getEffectiveMaxVolume()
+        seekTotalVolume.max = maxAllowed
+        progressTotalVolume.max = maxAllowed
+
+        tvVolumeCardTitle.text = when {
+            AudioEngine.sliderOnlyNoBoostMode -> "עוצמת שמע (0% - 100% | מצב מחוון בלבד)"
+            AudioEngine.allow300PercentBoost -> "עוצמת שמע טורבו (0% - 300%)"
+            else -> "עוצמת שמע ראשית (0% - 200%)"
+        }
+
+        btnVol300.visibility = if (AudioEngine.allow300PercentBoost && !AudioEngine.sliderOnlyNoBoostMode) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+
+        if (AudioEngine.currentTotalVolume > maxAllowed) {
+            AudioEngine.currentTotalVolume = maxAllowed
+            AudioEngine.applyVolume(this, maxAllowed, false)
+        }
+        seekTotalVolume.progress = AudioEngine.currentTotalVolume
+        progressTotalVolume.progress = AudioEngine.currentTotalVolume
+        updateServiceButtonState()
+    }
+
     private fun setupModernUI() {
         switchEnable = findViewById(R.id.switchEnable)
         val tvStatus = findViewById<TextView>(R.id.tvStatus)
         val cardHeader = findViewById<MaterialCardView>(R.id.cardHeader)
         btnEnableSystemSlider = findViewById(R.id.btnEnableSystemSlider)
 
+        tvVolumeCardTitle = findViewById(R.id.tvVolumeCardTitle)
         seekTotalVolume = findViewById(R.id.seekTotalVolume)
         val tvTotalVolume = findViewById<TextView>(R.id.tvTotalVolume)
         val tvSubBoostInfo = findViewById<TextView>(R.id.tvSubBoostInfo)
-        val progressTotalVolume = findViewById<ProgressBar>(R.id.progressTotalVolume)
+        progressTotalVolume = findViewById(R.id.progressTotalVolume)
+        btnVol300 = findViewById(R.id.btnVol300)
+
+        val switchAllow300 = findViewById<SwitchCompat>(R.id.switchAllow300Boost)
+        val switchSliderOnly = findViewById<SwitchCompat>(R.id.switchSliderOnlyMode)
 
         val switchAntiClip = findViewById<SwitchCompat>(R.id.switchAntiClip)
         val switchHiRes = findViewById<SwitchCompat>(R.id.switchHiRes)
@@ -349,6 +457,15 @@ class MainActivity : AppCompatActivity() {
         val tvClarityValue = findViewById<TextView>(R.id.tvClarityValue)
         val seekWarmth = findViewById<SeekBar>(R.id.seekWarmth)
         val tvWarmthValue = findViewById<TextView>(R.id.tvWarmthValue)
+
+        // בקרי מנוע שיפור השירים החדש
+        val switchSongRemaster = findViewById<SwitchCompat>(R.id.switchSongRemaster)
+        val seekSongUpscale = findViewById<SeekBar>(R.id.seekSongUpscale)
+        val tvSongUpscaleVal = findViewById<TextView>(R.id.tvSongUpscaleValue)
+        val seekSongSep = findViewById<SeekBar>(R.id.seekSongSeparation)
+        val tvSongSepVal = findViewById<TextView>(R.id.tvSongSeparationValue)
+        val seekSongPunch = findViewById<SeekBar>(R.id.seekSongPunch)
+        val tvSongPunchVal = findViewById<TextView>(R.id.tvSongPunchValue)
 
         val seekBass = findViewById<SeekBar>(R.id.seekBass)
         val tvBassValue = findViewById<TextView>(R.id.tvBassValue)
@@ -364,18 +481,52 @@ class MainActivity : AppCompatActivity() {
             runCatching { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
         }
 
+        fun refreshHeaderStatusText() {
+            when {
+                !AudioEngine.isBoosterActive -> {
+                    tvStatus.text = "מנוע סאונד ומחוון כבויים ●"
+                    tvStatus.setTextColor(Color.parseColor("#FF5252"))
+                    cardHeader.strokeColor = Color.parseColor("#263042")
+                }
+                AudioEngine.sliderOnlyNoBoostMode -> {
+                    tvStatus.text = "מצב עיצוב מחוון בלבד פעיל ● ללא הגברת סאונד"
+                    tvStatus.setTextColor(Color.parseColor("#00E5FF"))
+                    cardHeader.strokeColor = Color.parseColor("#00E5FF")
+                }
+                AudioEngine.allow300PercentBoost -> {
+                    tvStatus.text = "מנוע DSP 300% טורבו + שיפור שירים פעיל ●"
+                    tvStatus.setTextColor(Color.parseColor("#FFD740"))
+                    cardHeader.strokeColor = Color.parseColor("#FFD740")
+                }
+                else -> {
+                    tvStatus.text = "מנוע DSP HD פעיל ● מוגן מהתנגשויות שמע"
+                    tvStatus.setTextColor(Color.parseColor("#00E676"))
+                    cardHeader.strokeColor = Color.parseColor("#00E676")
+                }
+            }
+        }
+
         switchEnable.setOnCheckedChangeListener { _, isChecked ->
             AudioEngine.setEnabled(isChecked)
-            if (isChecked) {
-                tvStatus.text = "מנוע DSP HD פעיל ● מוגן מהתנגשויות שמע"
-                tvStatus.setTextColor(Color.parseColor("#00E676"))
-                cardHeader.strokeColor = Color.parseColor("#00E676")
-            } else {
-                tvStatus.text = "מנוע סאונד כבוי ●"
-                tvStatus.setTextColor(Color.parseColor("#FF5252"))
-                cardHeader.strokeColor = Color.parseColor("#263042")
-                if (seekTotalVolume.progress > 100) seekTotalVolume.progress = 100
-            }
+            syncVolumeRangeUI()
+            refreshHeaderStatusText()
+        }
+
+        switchAllow300.isChecked = AudioEngine.allow300PercentBoost
+        switchAllow300.setOnCheckedChangeListener { _, isChecked ->
+            AudioEngine.allow300PercentBoost = isChecked
+            AudioEngine.saveEngineModes(this)
+            syncVolumeRangeUI()
+            refreshHeaderStatusText()
+        }
+
+        switchSliderOnly.isChecked = AudioEngine.sliderOnlyNoBoostMode
+        switchSliderOnly.setOnCheckedChangeListener { _, isChecked ->
+            AudioEngine.sliderOnlyNoBoostMode = isChecked
+            AudioEngine.setEnabled(AudioEngine.isBoosterActive)
+            AudioEngine.saveEngineModes(this)
+            syncVolumeRangeUI()
+            refreshHeaderStatusText()
         }
 
         seekTotalVolume.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -387,16 +538,19 @@ class MainActivity : AppCompatActivity() {
                     AudioEngine.applyVolume(this@MainActivity, progress, showNativeSystemUI = false)
                 }
 
-                if (progress <= 100) {
+                if (AudioEngine.sliderOnlyNoBoostMode) {
+                    tvSubBoostInfo.text = "מערכת: $progress% | מצב עיצוב מחוון בלבד (ללא הגברה)"
+                } else if (progress <= 100) {
                     tvSubBoostInfo.text = "מערכת: $progress% | הגברת HD: מוכנה"
                 } else {
                     val extraPercent = progress - 100
-                    val db = String.format("%.1f", extraPercent * 0.18f)
+                    val db = String.format("%.1f", extraPercent * 0.17f)
                     tvSubBoostInfo.text = "מערכת: 100% | הגברת HD נקייה: +$db dB"
                 }
 
                 val color = when {
-                    progress > 160 -> Color.parseColor("#FF5252")
+                    progress > 220 -> Color.parseColor("#FF1744")
+                    progress > 160 -> Color.parseColor("#FF9100")
                     progress > 100 -> Color.parseColor("#FFD740")
                     else -> Color.parseColor("#00E676")
                 }
@@ -418,12 +572,26 @@ class MainActivity : AppCompatActivity() {
             AudioEngine.applyVolume(this, 100, false)
         }
         findViewById<MaterialButton>(R.id.btnVol150).setOnClickListener {
-            seekTotalVolume.progress = 150
-            AudioEngine.applyVolume(this, 150, false)
+            if (AudioEngine.sliderOnlyNoBoostMode) {
+                Toast.makeText(this, "כבה את 'מצב עיצוב מחוון בלבד' כדי להגביר מעל 100%", Toast.LENGTH_SHORT).show()
+            } else {
+                seekTotalVolume.progress = 150
+                AudioEngine.applyVolume(this, 150, false)
+            }
         }
         findViewById<MaterialButton>(R.id.btnVol200).setOnClickListener {
-            seekTotalVolume.progress = 200
-            AudioEngine.applyVolume(this, 200, false)
+            if (AudioEngine.sliderOnlyNoBoostMode) {
+                Toast.makeText(this, "כבה את 'מצב עיצוב מחוון בלבד' כדי להגביר מעל 100%", Toast.LENGTH_SHORT).show()
+            } else {
+                seekTotalVolume.progress = 200
+                AudioEngine.applyVolume(this, 200, false)
+            }
+        }
+        btnVol300.setOnClickListener {
+            if (!AudioEngine.sliderOnlyNoBoostMode && AudioEngine.allow300PercentBoost) {
+                seekTotalVolume.progress = 300
+                AudioEngine.applyVolume(this, 300, false)
+            }
         }
 
         switchAntiClip.setOnCheckedChangeListener { _, isChecked ->
@@ -447,6 +615,51 @@ class MainActivity : AppCompatActivity() {
             override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
                 tvWarmthValue.text = "$p%"
                 AudioEngine.warmthLevel = p
+                AudioEngine.updateSoundQualityDSP()
+            }
+            override fun onStartTrackingTouch(s: SeekBar?) {}
+            override fun onStopTrackingTouch(s: SeekBar?) {}
+        })
+
+        // חיבור מנוע שיפור השירים לאיכות שיא (Ultra Hi-Fi 32-Bit Song Remaster)
+        switchSongRemaster.isChecked = AudioEngine.songRemasterEnabled
+        seekSongUpscale.progress = AudioEngine.songUpscaleLevel
+        tvSongUpscaleVal.text = "${AudioEngine.songUpscaleLevel}%"
+        seekSongSep.progress = AudioEngine.songSeparationLevel
+        tvSongSepVal.text = "${AudioEngine.songSeparationLevel}%"
+        seekSongPunch.progress = AudioEngine.songPunchLevel
+        tvSongPunchVal.text = "${AudioEngine.songPunchLevel}%"
+
+        switchSongRemaster.setOnCheckedChangeListener { _, isChecked ->
+            AudioEngine.songRemasterEnabled = isChecked
+            AudioEngine.saveEngineModes(this)
+            AudioEngine.updateSoundQualityDSP()
+        }
+        seekSongUpscale.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                tvSongUpscaleVal.text = "$p%"
+                AudioEngine.songUpscaleLevel = p
+                AudioEngine.saveEngineModes(this@MainActivity)
+                AudioEngine.updateSoundQualityDSP()
+            }
+            override fun onStartTrackingTouch(s: SeekBar?) {}
+            override fun onStopTrackingTouch(s: SeekBar?) {}
+        })
+        seekSongSep.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                tvSongSepVal.text = "$p%"
+                AudioEngine.songSeparationLevel = p
+                AudioEngine.saveEngineModes(this@MainActivity)
+                AudioEngine.updateSoundQualityDSP()
+            }
+            override fun onStartTrackingTouch(s: SeekBar?) {}
+            override fun onStopTrackingTouch(s: SeekBar?) {}
+        })
+        seekSongPunch.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                tvSongPunchVal.text = "$p%"
+                AudioEngine.songPunchLevel = p
+                AudioEngine.saveEngineModes(this@MainActivity)
                 AudioEngine.updateSoundQualityDSP()
             }
             override fun onStartTrackingTouch(s: SeekBar?) {}
@@ -552,10 +765,13 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.btnPresetGaming).setOnClickListener {
             applyPreset(listOf(45, 20, 0, 50, 65), bass = 500, surround = 900, reverb = 3)
         }
+
+        syncVolumeRangeUI()
+        refreshHeaderStatusText()
     }
 
     // =========================================================================
-    // קטגוריה 5: התאמה דינמית לכל 21 המחוונים
+    // קטגוריה 5: התאמה דינמית ל-15 המחוונים המסודרים
     // =========================================================================
     private fun setupSliderDesignCategory() {
         val stylesContainer = findViewById<LinearLayout>(R.id.stylesGridContainer)
@@ -1046,9 +1262,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (VolumeOverlayService.instance == null) {
+            val maxAllowed = AudioEngine.getEffectiveMaxVolume()
             when (keyCode) {
                 KeyEvent.KEYCODE_VOLUME_UP -> {
-                    seekTotalVolume.progress = (seekTotalVolume.progress + 8).coerceAtMost(200)
+                    seekTotalVolume.progress = (seekTotalVolume.progress + 8).coerceAtMost(maxAllowed)
                     AudioEngine.applyVolume(this, seekTotalVolume.progress, showNativeSystemUI = true)
                     return true
                 }
@@ -1083,7 +1300,7 @@ class MainActivity : AppCompatActivity() {
 }
 
 // =========================================================================
-// 3. שירות המחוון הצף: כולל לחיצה רציפה (Hold-to-Volume) והגנה מלאה על צילום מסך!
+// 3. שירות המחוון הצף (תומך במצב עיצוב מחוון בלבד, הגברת 300%, לחיצה רציפה וצילום מסך)
 // =========================================================================
 class VolumeOverlayService : AccessibilityService() {
 
@@ -1111,11 +1328,10 @@ class VolumeOverlayService : AccessibilityService() {
         }
     }
 
-    // מנגנון לחיצה רציפה (Continuous Hold) + זיהוי קיצורי מערכת (כמו צילום מסך)
     private val volumeKeyHandler = Handler(Looper.getMainLooper())
     private var isVolUpPressed = false
     private var isVolDownPressed = false
-    private var activeHoldDirection = 0 // +1 = הגברה, -1 = הנמכה, 0 = ללא
+    private var activeHoldDirection = 0
     private var pendingSingleStepApplied = false
     private var comboShortcutDetected = false
 
@@ -1123,7 +1339,6 @@ class VolumeOverlayService : AccessibilityService() {
         if (comboShortcutDetected || activeHoldDirection == 0) return@Runnable
         pendingSingleStepApplied = true
         stepVolumeInDirection(activeHoldDirection, stepAmount = 6)
-        // אם הכפתור עדיין מוחזק לחוץ, מתחילים ריצה רציפה עד עזיבת הכפתור!
         volumeKeyHandler.postDelayed(holdRepeatRunnable, 240L)
     }
 
@@ -1151,13 +1366,12 @@ class VolumeOverlayService : AccessibilityService() {
     fun isEditModeActive(): Boolean = isInteractiveEditActive
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
-        if (!AudioEngine.isBoosterActive) return super.onKeyEvent(event)
+        // השירות פועל גם כשנמצאים במצב "עיצוב מחוון בלבד ללא הגברה"
+        if (!AudioEngine.isBoosterActive && !AudioEngine.sliderOnlyNoBoostMode) return super.onKeyEvent(event)
         if (AudioEngine.isInternalVolumeChange) return false
 
         val keyCode = event.keyCode
 
-        // אם נלחץ כפתור אחר בזמן שלוחצים על ווליום (למשל כפתור Power לצילום מסך),
-        // מבטלים מיד את התערבות האפליקציה ומאפשרים למערכת לבצע את קיצור הדרך!
         if (keyCode != KeyEvent.KEYCODE_VOLUME_UP && keyCode != KeyEvent.KEYCODE_VOLUME_DOWN) {
             if (isVolUpPressed || isVolDownPressed) {
                 cancelVolumeHoldForSystemShortcut()
@@ -1177,20 +1391,17 @@ class VolumeOverlayService : AccessibilityService() {
                 if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) isVolUpPressed = true
                 if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) isVolDownPressed = true
 
-                // אם שני כפתורי הווליום נלחצו יחד (קיצור דרך של נגישות/מערכת), לא מתערבים!
                 if (isVolUpPressed && isVolDownPressed) {
                     cancelVolumeHoldForSystemShortcut()
                     return false
                 }
 
-                // תחילת הלחיצה הראשונה (repeatCount == 0)
                 if (event.repeatCount == 0 && activeHoldDirection == 0) {
                     comboShortcutDetected = false
                     pendingSingleStepApplied = false
                     activeHoldDirection = if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) 1 else -1
                     volumeKeyHandler.removeCallbacks(delayedInitialStepRunnable)
                     volumeKeyHandler.removeCallbacks(holdRepeatRunnable)
-                    // המתנה קצרה של 140ms כדי לוודא שזה לא שילוב כפתורים לצילום מסך
                     volumeKeyHandler.postDelayed(delayedInitialStepRunnable, 140L)
                 }
                 return true
@@ -1205,7 +1416,6 @@ class VolumeOverlayService : AccessibilityService() {
                 volumeKeyHandler.removeCallbacks(holdRepeatRunnable)
                 activeHoldDirection = 0
 
-                // אם זו הייתה לחיצה קצרה רגילה (פחות מ-140ms) ולא קיצור דרך, מבצעים צעד ווליום אחד
                 if (!comboShortcutDetected && !pendingSingleStepApplied && dirBeforeRelease != 0) {
                     stepVolumeInDirection(dirBeforeRelease, stepAmount = 7)
                 }
@@ -1228,6 +1438,7 @@ class VolumeOverlayService : AccessibilityService() {
         val am = audioManager ?: return
         val curSys = am.getStreamVolume(AudioManager.STREAM_MUSIC)
         val useNativeSystemUI = (AudioEngine.sliderStyleIndex == 0)
+        val maxAllowed = AudioEngine.getEffectiveMaxVolume()
 
         if (direction > 0) {
             if (curSys < maxSysVol && AudioEngine.currentTotalVolume < 100) {
@@ -1235,7 +1446,7 @@ class VolumeOverlayService : AccessibilityService() {
                 AudioEngine.currentTotalVolume = nextVol
             } else {
                 val baseVol = if (AudioEngine.currentTotalVolume < 100) 100 else AudioEngine.currentTotalVolume
-                AudioEngine.currentTotalVolume = (baseVol + stepAmount).coerceAtMost(200)
+                AudioEngine.currentTotalVolume = (baseVol + stepAmount).coerceAtMost(maxAllowed)
             }
         } else {
             if (AudioEngine.currentTotalVolume > 100) {
@@ -1459,7 +1670,7 @@ class VolumeOverlayService : AccessibilityService() {
 
     private fun showNativeBadgeIfNeeded() {
         hideHandler.removeCallbacks(hideRunnable)
-        if (AudioEngine.currentTotalVolume <= 100) {
+        if (AudioEngine.currentTotalVolume <= 100 || AudioEngine.sliderOnlyNoBoostMode) {
             removeBadge()
             return
         }
@@ -1532,7 +1743,6 @@ class VolumeOverlayService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // אם נלכדה התראת מערכת של צילום מסך או תפריט כיבוי, מפסיקים מיד כל פעולת ווליום
         val pkg = event?.packageName?.toString() ?: ""
         if (pkg.contains("systemui", ignoreCase = true) && (isVolUpPressed || isVolDownPressed)) {
             val cls = event?.className?.toString() ?: ""
