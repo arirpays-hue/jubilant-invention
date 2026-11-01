@@ -411,7 +411,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="סנכרון עם מחוון הווליום של המכשיר"
+                            android:text="סנכרון חכם ללא התנגשות עם מחוון המערכת"
                             android:textColor="#00E5FF"
                             android:textSize="15sp"
                             android:textStyle="bold" />
@@ -420,7 +420,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="4dp"
-                            android:text="תומך בלחיצה רציפה על כפתורי הווליום, אינו מפריע לצילום מסך, וכולל כפתורי רמקול/רטט/השתק פעילים על המחוון."
+                            android:text="מונע קפיצה של מחוון המערכת ומונע לופים, תומך בלחיצה רציפה, אינו מפריע לצילום מסך, ומזהה בלוטות' וערוצי שמע אוטומטית."
                             android:textColor="#D0D8E8"
                             android:textSize="12sp" />
 
@@ -446,7 +446,7 @@
                 android:orientation="vertical"
                 android:visibility="gone">
 
-                <!-- כרטיס AI ראשון ובולט: מנוע AI מוכן לשיפור שירים לאיכות גבוהה במיוחד -->
+                <!-- כרטיס AI ראשון: מנוע AI מוכן לשיפור שירים לאיכות גבוהה במיוחד -->
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -1230,7 +1230,7 @@
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="סגנון מחוון (18 עיצובים מותאמים אישית)"
+                                    android:text="סגנון מחוון (18 עיצובים עם אנימציה אישית)"
                                     android:textColor="#FFFFFF"
                                     android:textSize="15sp"
                                     android:textStyle="bold" />
@@ -1667,7 +1667,7 @@
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
-                <!-- 4. שקיפות מחוון, טשטוש מסך והשחרת רקע -->
+                <!-- 4. שקיפות מחוון, טשטוש מסך יוקרתי (כמו בתמונה), השחרת רקע והיעלמות בנגיעה בחוץ -->
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -1687,7 +1687,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginBottom="12dp"
-                            android:text="שקיפות, טשטוש והשחרת מסך (ללא חסימת מגע)"
+                            android:text="שקיפות, טשטוש זכוכית כהה ואנימציית סגירה"
                             android:textColor="#FFFFFF"
                             android:textSize="16sp"
                             android:textStyle="bold" />
@@ -1742,7 +1742,7 @@
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="טשטוש מסך ברקע (True Optical Blur)"
+                                    android:text="טשטוש מסך ברקע (Frosted Glass Blur)"
                                     android:textColor="#00E5FF"
                                     android:textSize="14sp"
                                     android:textStyle="bold" />
@@ -1750,7 +1750,7 @@
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="מטשטש אופטית את התוכן מאחורי המחוון בלי לחסום מגע"
+                                    android:text="יוצר טשטוש עומק חלבי כהה ברקע שנעלם באנימציה חלקה בנגיעה במסך"
                                     android:textColor="#A0AAB8"
                                     android:textSize="11sp" />
                             </LinearLayout>
@@ -1773,7 +1773,7 @@
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
-                                android:text="רדיוס טשטוש המסך (Blur Radius)"
+                                android:text="עוצמת טשטוש המסך (Blur Strength)"
                                 android:textColor="#D0D8E8"
                                 android:textSize="12sp" />
 
@@ -1814,7 +1814,7 @@
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="השחרת המסך ברקע (Touch-Through Dim)"
+                                    android:text="השחרת המסך ברקע (Dim Backdrop)"
                                     android:textColor="#FFD740"
                                     android:textSize="14sp"
                                     android:textStyle="bold" />
@@ -1822,7 +1822,7 @@
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="מחשיך את הרקע מבלי לחסום נגיעות בשאר המסך"
+                                    android:text="מוסיף שכבת החשכה קולנועית מאחורי המחוון"
                                     android:textColor="#A0AAB8"
                                     android:textSize="11sp" />
                             </LinearLayout>
@@ -1864,10 +1864,55 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="4dp"
+                            android:layout_marginBottom="14dp"
                             android:max="100"
                             android:progress="25"
                             android:progressTint="#FFD740"
                             android:thumbTint="#FFD740" />
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginBottom="10dp"
+                            android:background="#263042" />
+
+                        <!-- אפשרות חדשה: העלמת המחוון והטשטוש מיד בנגיעה מחוץ למחוון עם האנימציה שלו -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="4dp">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="העלם מיד בנגיעה מחוץ למחוון (Outside Touch)"
+                                    android:textColor="#00E676"
+                                    android:textSize="14sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="נגיעה בכל מקום במסך מחוץ למחוון מעלימה מיד את המחוון והטשטוש עם האנימציה המותאמת שלו"
+                                    android:textColor="#A0AAB8"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+
+                            <androidx.appcompat.widget.SwitchCompat
+                                android:id="@+id/switchDismissOutside"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:checked="true"
+                                app:thumbTint="#00E676" />
+                        </LinearLayout>
 
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
