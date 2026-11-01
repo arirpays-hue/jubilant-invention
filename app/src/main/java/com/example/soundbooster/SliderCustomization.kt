@@ -303,11 +303,15 @@ object SliderThemeManager {
 }
 
 // =========================================================================
-// 2. גלגל צבעים חכם
+// 2. גלגל צבעים מקצועי (16.7 מיליון צבעים - Full sRGB HSV Spectrum + Quick Swatches)
+//    קל ופשוט לשימוש: כולל שחור מוחלט (0%), לבן נקי (100%), וכל גוון ורוויה בעולם!
 // =========================================================================
 class TrueColorWheelView(context: Context) : View(context) {
     private val wheelPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val centerOverlayPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val darknessOverlayPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val swatchPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+
     private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 4f
@@ -327,103 +331,173 @@ class TrueColorWheelView(context: Context) : View(context) {
         style = Paint.Style.FILL
     }
 
-    private var pointerAngleDeg = 190f
-    private var pointerRadiusRatio = 0.85f
-    private var wheelRotationOffsetDeg = 0f
-    private var wheelMaxSaturation = 1.0f
-    private var wheelBrightnessVal = 1.0f
+    // 3 רכיבי הצבע הישירים שמייצגים כל צבע בעולם (Hue: 0..360, Sat: 0..1, Val: 0..1)
+    private var currentHueDeg = 190f
+    private var currentSatRatio = 0.85f
+    private var currentValRatio = 1.0f
+
+    // 10 צבעים מהירים בלחיצה אחת בתחתית הקנבס (לבן, שחור, ציאן, ירוק, צהוב, כתום, אדום, מג'נטה, סגול, כחול)
+    private val quickSwatches = intArrayOf(
+        Color.parseColor("#FFFFFF"),
+        Color.parseColor("#000000"),
+        Color.parseColor("#00E5FF"),
+        Color.parseColor("#00E676"),
+        Color.parseColor("#FFD740"),
+        Color.parseColor("#FF6D00"),
+        Color.parseColor("#FF1744"),
+        Color.parseColor("#FF007F"),
+        Color.parseColor("#AA00FF"),
+        Color.parseColor("#2979FF")
+    )
+    private val swatchCentersX = FloatArray(quickSwatches.size)
+    private var swatchCenterY = 0f
+    private var swatchRadius = 0f
 
     var onWheelColorChanged: ((Int) -> Unit)? = null
 
     fun setColorFromExternal(color: Int) {
         val hsv = FloatArray(3)
         Color.colorToHSV(color, hsv)
-        wheelRotationOffsetDeg = 0f
-        pointerAngleDeg = hsv[0]
-        pointerRadiusRatio = 1f
-        wheelMaxSaturation = hsv[1]
-        wheelBrightnessVal = hsv[2].coerceAtLeast(0.05f)
+        currentHueDeg = hsv[0].coerceIn(0f, 360f)
+        currentSatRatio = hsv[1].coerceIn(0f, 1f)
+        currentValRatio = hsv[2].coerceIn(0f, 1f)
         invalidate()
     }
 
-    fun getHueSliderValue(): Int = ((pointerAngleDeg + wheelRotationOffsetDeg) % 360f).roundToInt()
-    fun getSatSliderValue(): Int = ((pointerRadiusRatio * wheelMaxSaturation) * 100f).roundToInt().coerceIn(0, 100)
-    fun getValSliderValue(): Int = (wheelBrightnessVal * 100f).roundToInt().coerceIn(5, 100)
+    fun getHueSliderValue(): Int = currentHueDeg.roundToInt().coerceIn(0, 360)
+    fun getSatSliderValue(): Int = (currentSatRatio * 100f).roundToInt().coerceIn(0, 100)
+    fun getValSliderValue(): Int = (currentValRatio * 100f).roundToInt().coerceIn(0, 100)
 
     fun updateWheelBrightness(valPercent: Int): Int {
-        wheelBrightnessVal = (valPercent / 100f).coerceIn(0.05f, 1f)
+        currentValRatio = (valPercent / 100f).coerceIn(0f, 1f)
         invalidate()
         return computeCurrentSelectedColor()
     }
 
     fun updateWheelSaturationScale(satPercent: Int): Int {
-        val ratio = pointerRadiusRatio.coerceAtLeast(0.05f)
-        wheelMaxSaturation = ((satPercent / 100f) / ratio).coerceIn(0f, 1f)
+        currentSatRatio = (satPercent / 100f).coerceIn(0f, 1f)
         invalidate()
         return computeCurrentSelectedColor()
     }
 
     fun updateWheelHueShift(targetHueDeg: Int): Int {
-        var shift = targetHueDeg.toFloat() - pointerAngleDeg
-        while (shift < 0f) shift += 360f
-        wheelRotationOffsetDeg = shift % 360f
+        currentHueDeg = targetHueDeg.toFloat().coerceIn(0f, 360f)
         invalidate()
         return computeCurrentSelectedColor()
     }
 
     fun computeCurrentSelectedColor(): Int {
-        val effectiveHue = (pointerAngleDeg + wheelRotationOffsetDeg) % 360f
-        val effectiveSat = (pointerRadiusRatio * wheelMaxSaturation).coerceIn(0f, 1f)
-        return Color.HSVToColor(floatArrayOf(effectiveHue, effectiveSat, wheelBrightnessVal))
+        return Color.HSVToColor(floatArrayOf(currentHueDeg, currentSatRatio, currentValRatio))
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        val cx = width / 2f
-        val cy = height / 2f
+        val w = width.toFloat()
+        val h = height.toFloat()
+        if (w <= 0f || h <= 0f) return
+
+        // חלוקת הקנבס: גלגל צבעים גדול בחלק העליון + שורת צבעים מהירים בתחתית
+        val swatchBarHeight = h * 0.18f
+        val wheelAreaH = h - swatchBarHeight
+        val cx = w / 2f
+        val cy = wheelAreaH / 2f
         val radius = min(cx, cy) * 0.88f
         if (radius <= 0f) return
 
+        // 1. ציור ספקטרום 360 מעלות מלא
         val hueColors = IntArray(13) { i ->
-            val h = (i * 30f + wheelRotationOffsetDeg) % 360f
-            Color.HSVToColor(floatArrayOf(h, wheelMaxSaturation, wheelBrightnessVal))
+            val hue = (i * 30f) % 360f
+            Color.HSVToColor(floatArrayOf(hue, 1f, 1f))
         }
         wheelPaint.shader = SweepGradient(cx, cy, hueColors, null)
         canvas.drawCircle(cx, cy, radius, wheelPaint)
 
-        val centerColor = Color.HSVToColor(floatArrayOf(0f, 0f, wheelBrightnessVal))
+        // 2. מעבר רדיאלי מלבן במרכז (רוויה 0%) לצבע מלא בהיקף (רוויה 100%)
         centerOverlayPaint.shader = RadialGradient(
             cx, cy, radius,
-            centerColor, Color.TRANSPARENT, Shader.TileMode.CLAMP
+            Color.WHITE, Color.TRANSPARENT, Shader.TileMode.CLAMP
         )
         canvas.drawCircle(cx, cy, radius, centerOverlayPaint)
+
+        // 3. שכבת בהירות (Brightness / Value) המאפשרת להגיע עד שחור מוחלט (0%)
+        val darkAlpha = ((1f - currentValRatio) * 255f).roundToInt().coerceIn(0, 255)
+        if (darkAlpha > 0) {
+            darknessOverlayPaint.color = Color.argb(darkAlpha, 0, 0, 0)
+            canvas.drawCircle(cx, cy, radius, darknessOverlayPaint)
+        }
+
         canvas.drawCircle(cx, cy, radius, borderPaint)
 
-        val angleRad = Math.toRadians(pointerAngleDeg.toDouble())
-        val dist = pointerRadiusRatio * radius
+        // 4. ציור סמן הבחירה בנקודה המדויקת של הגוון והרוויה הנוכחיים
+        val angleRad = Math.toRadians(currentHueDeg.toDouble())
+        val dist = currentSatRatio * radius
         val sx = (cx + cos(angleRad) * dist).toFloat()
         val sy = (cy + sin(angleRad) * dist).toFloat()
 
-        previewFillPaint.color = computeCurrentSelectedColor()
-        canvas.drawCircle(sx, sy, 20f, previewFillPaint)
-        canvas.drawCircle(sx, sy, 20f, selectorOuterPaint)
-        canvas.drawCircle(sx, sy, 22f, selectorInnerPaint)
+        val selectedColor = computeCurrentSelectedColor()
+        previewFillPaint.color = selectedColor
+        canvas.drawCircle(sx, sy, 22f, previewFillPaint)
+        canvas.drawCircle(sx, sy, 22f, selectorOuterPaint)
+        canvas.drawCircle(sx, sy, 24.5f, selectorInnerPaint)
+
+        // 5. ציור שורת 10 צבעים מהירים בתחתית לבחירה בנגיעה אחת
+        val count = quickSwatches.size
+        val stepX = w / count
+        swatchRadius = min(stepX * 0.36f, swatchBarHeight * 0.38f)
+        swatchCenterY = wheelAreaH + swatchBarHeight * 0.52f
+
+        for (i in 0 until count) {
+            val scx = stepX * (i + 0.5f)
+            swatchCentersX[i] = scx
+            swatchPaint.style = Paint.Style.FILL
+            swatchPaint.color = quickSwatches[i]
+            canvas.drawCircle(scx, swatchCenterY, swatchRadius, swatchPaint)
+
+            swatchPaint.style = Paint.Style.STROKE
+            swatchPaint.strokeWidth = 2.5f
+            swatchPaint.color = Color.parseColor("#4E5D78")
+            canvas.drawCircle(scx, swatchCenterY, swatchRadius, swatchPaint)
+        }
     }
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        val w = width.toFloat()
+        val h = height.toFloat()
+        if (w <= 0f || h <= 0f) return super.onTouchEvent(event)
+
+        val swatchBarHeight = h * 0.18f
+        val wheelAreaH = h - swatchBarHeight
+
+        if (event.action == MotionEvent.ACTION_DOWN && event.y >= wheelAreaH - 6f) {
+            // בדיקה אם המשתמש לחץ על אחד מעיגולי הצבע המהירים בתחתית
+            for (i in quickSwatches.indices) {
+                if (hypot((event.x - swatchCentersX[i]).toDouble(), (event.y - swatchCenterY).toDouble()) <= swatchRadius * 1.35f) {
+                    setColorFromExternal(quickSwatches[i])
+                    onWheelColorChanged?.invoke(computeCurrentSelectedColor())
+                    parent?.requestDisallowInterceptTouchEvent(true)
+                    return true
+                }
+            }
+        }
+
         if (event.action == MotionEvent.ACTION_DOWN || event.action == MotionEvent.ACTION_MOVE) {
-            val cx = width / 2f
-            val cy = height / 2f
+            val cx = w / 2f
+            val cy = wheelAreaH / 2f
             val radius = min(cx, cy) * 0.88f
             val dx = event.x - cx
             val dy = event.y - cy
             val dist = hypot(dx.toDouble(), dy.toDouble()).toFloat()
 
-            pointerRadiusRatio = (dist / radius).coerceIn(0f, 1f)
+            currentSatRatio = (dist / radius).coerceIn(0f, 1f)
             var angle = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
-            if (angle < 0) angle += 360f
-            pointerAngleDeg = angle
+            if (angle < 0f) angle += 360f
+            currentHueDeg = angle.coerceIn(0f, 360f)
+
+            // אם הבהירות הייתה על 0% (שחור מוחלט) והמשתמש נוגע בגלגל, מעלים אוטומטית בהירות כדי שיראה את הצבע שבחר
+            if (currentValRatio < 0.08f) {
+                currentValRatio = 1.0f
+            }
 
             invalidate()
             onWheelColorChanged?.invoke(computeCurrentSelectedColor())
@@ -806,8 +880,7 @@ object VectorIconRenderer {
 }
 
 // =========================================================================
-// 4. תצוגת המחוון הצף + מנוע אנימציות הופעה והיעלמות מותאם לכל אחד מ-18 המחוונים
-//    + תמיכה בסגירה מיידית וחלקה בנגיעה מחוץ למחוון (ACTION_OUTSIDE)
+// 4. תצוגת המחוון הצף (ללא שום שינוי ווליום אוטומטי ב-onDraw!)
 // =========================================================================
 class CustomThemedSliderOverlayView(
     context: Context,
@@ -830,6 +903,7 @@ class CustomThemedSliderOverlayView(
     private var lastRawY = 0f
     private var lastNonZeroVolume = 100
     var isAnimatingExit = false
+    private var isDraggingVolumeBar = false
 
     private fun dp(value: Float): Float {
         return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, resources.displayMetrics)
@@ -844,9 +918,6 @@ class CustomThemedSliderOverlayView(
         return Color.argb(a, Color.red(color), Color.green(color), Color.blue(color))
     }
 
-    // =====================================================================
-    // אנימציית הופעה מותאמת אישית לכל אחד מ-18 המחוונים
-    // =====================================================================
     fun playCustomEnterAnimation(styleIdx: Int = AudioEngine.sliderStyleIndex) {
         animate().cancel()
         isAnimatingExit = false
@@ -856,7 +927,6 @@ class CustomThemedSliderOverlayView(
 
         alpha = 0f
         when (styleIdx) {
-            // בר עליון (13) ואנדרואיד אופקי (3): החלקה מלמעלה עם קפיציות רכה
             3, 13 -> {
                 translationX = 0f
                 translationY = -dp(65f)
@@ -872,7 +942,6 @@ class CustomThemedSliderOverlayView(
                     .setListener(null)
                     .start()
             }
-            // חוגת אולפן (5) וארקייד 8-Bit (8): אפקט Pop-In ממרכז האלמנט
             5, 8 -> {
                 translationX = 0f
                 translationY = 0f
@@ -887,7 +956,6 @@ class CustomThemedSliderOverlayView(
                     .setListener(null)
                     .start()
             }
-            // סייבר ניאון (4) וטלמטריית HUD (15): פתיחה טכנולוגית אנכית (Cyber Unfold)
             4, 15 -> {
                 translationX = sideSlidePx * 0.45f
                 translationY = 0f
@@ -903,7 +971,6 @@ class CustomThemedSliderOverlayView(
                     .setListener(null)
                     .start()
             }
-            // קפסולות, זכוכית חלבית וקשת צבעים (1, 2, 6, 7, 9, 10, 11, 12, 14, 16, 17): גלישה מהצד עם זום אלגנטי
             else -> {
                 translationX = sideSlidePx
                 translationY = 0f
@@ -922,9 +989,6 @@ class CustomThemedSliderOverlayView(
         }
     }
 
-    // =====================================================================
-    // אנימציית היעלמות חלקה מותאמת לכל מחוון (נקראת בסיום הטיימר או בנגיעה מחוץ למחוון)
-    // =====================================================================
     fun playCustomExitAnimation(styleIdx: Int = AudioEngine.sliderStyleIndex, onComplete: () -> Unit) {
         if (isAnimatingExit) return
         isAnimatingExit = true
@@ -960,7 +1024,8 @@ class CustomThemedSliderOverlayView(
         val h = height.toFloat()
         if (w <= 0f || h <= 0f) return
 
-        AudioEngine.refreshBluetoothAndStreamState(context)
+        // בדיקת סטטוס בלוטות' בלבד ללא שום שינוי או דריסה של הווליום!
+        AudioEngine.updateBluetoothStatusOnly(context)
 
         val cfg = SliderThemeManager.getCurrentConfig()
         val maxScale = AudioEngine.getEffectiveMaxVolume().toFloat()
@@ -993,7 +1058,7 @@ class CustomThemedSliderOverlayView(
                 cornerPx = cornerPx, brdW = brdW, icoSize = icoSize, txtPx = txtPx,
                 dpFn = ::dp, paint = paint
             )
-            if (AudioEngine.sliderStyleIndex == 17) {
+            if (AudioEngine.sliderStyleIndex == 17 && isAttachedToWindow && !isAnimatingExit) {
                 postInvalidateOnAnimation()
             }
         } else {
@@ -1554,7 +1619,6 @@ class CustomThemedSliderOverlayView(
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        // זיהוי נגיעה מחוץ למחוון (FLAG_WATCH_OUTSIDE_TOUCH): מעלים מיד את המחוון והטשטוש באנימציה חלקה!
         if (event.actionMasked == MotionEvent.ACTION_OUTSIDE) {
             if (!isEditPositionMode && SliderThemeManager.getCurrentConfig().dismissOnOutsideTouch) {
                 onOutsideTouchDismiss()
@@ -1585,33 +1649,50 @@ class CustomThemedSliderOverlayView(
             return true
         }
 
-        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-            if (handleInteractiveOverlayButtonClick(event.x, event.y)) {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                isDraggingVolumeBar = false
+                if (handleInteractiveOverlayButtonClick(event.x, event.y)) {
+                    return true
+                }
+                if ((AudioEngine.sliderStyleIndex == 16 || AudioEngine.sliderStyleIndex == 17) &&
+                    event.x > width * 0.58f
+                ) {
+                    return true
+                }
+                isDraggingVolumeBar = true
+                updateVolumeFromTouchPoint(event.x, event.y)
                 return true
             }
-        }
-
-        if (event.action == MotionEvent.ACTION_DOWN || event.action == MotionEvent.ACTION_MOVE) {
-            if ((AudioEngine.sliderStyleIndex == 16 || AudioEngine.sliderStyleIndex == 17) &&
-                event.x > width * 0.58f && event.action == MotionEvent.ACTION_DOWN
-            ) {
+            MotionEvent.ACTION_MOVE -> {
+                if (isDraggingVolumeBar) {
+                    updateVolumeFromTouchPoint(event.x, event.y)
+                }
                 return true
             }
-
-            val isHorizontalStyle = (AudioEngine.sliderStyleIndex == 3 || AudioEngine.sliderStyleIndex == 13)
-            val ratio = if (isHorizontalStyle) {
-                (event.x / width.toFloat()).coerceIn(0f, 1f)
-            } else {
-                1f - (event.y / height.toFloat()).coerceIn(0f, 1f)
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                isDraggingVolumeBar = false
+                return true
             }
-            val maxAllowed = AudioEngine.getEffectiveMaxVolume()
-            val newVol = (ratio * maxAllowed).roundToInt().coerceIn(0, maxAllowed)
-            AudioEngine.currentTotalVolume = newVol
-            invalidate()
-            onVolumeDragged(newVol)
-            return true
         }
         return super.onTouchEvent(event)
     }
+
+    private fun updateVolumeFromTouchPoint(touchX: Float, touchY: Float) {
+        val isHorizontalStyle = (AudioEngine.sliderStyleIndex == 3 || AudioEngine.sliderStyleIndex == 13)
+        val ratio = if (isHorizontalStyle) {
+            (touchX / width.toFloat()).coerceIn(0f, 1f)
+        } else {
+            val padPx = dp(18f)
+            val usableH = (height.toFloat() - padPx * 2f).coerceAtLeast(1f)
+            1f - ((touchY - padPx) / usableH).coerceIn(0f, 1f)
+        }
+        val maxAllowed = AudioEngine.getEffectiveMaxVolume()
+        val newVol = (ratio * maxAllowed).roundToInt().coerceIn(0, maxAllowed)
+        if (newVol != AudioEngine.currentTotalVolume) {
+            AudioEngine.currentTotalVolume = newVol
+            invalidate()
+            onVolumeDragged(newVol)
+        }
+    }
 }
- 
