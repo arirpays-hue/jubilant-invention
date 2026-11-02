@@ -3,6 +3,7 @@ package com.example.soundbooster
 import android.accessibilityservice.AccessibilityService
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
@@ -27,10 +28,10 @@ import android.provider.Settings
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.KeyEvent
-import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
+import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -148,7 +149,6 @@ object AudioEngine {
         }
     }
 
-    // מעדכן *אך ורק* את חיווי סמל הבלוטות' מבלי לגעת או לשנות את הווליום לעולם!
     fun updateBluetoothStatusOnly(context: Context) {
         val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
         var btFound = false
@@ -172,7 +172,6 @@ object AudioEngine {
         isBluetoothConnected = btFound
     }
 
-    // בודק אם נכנסה שיחה או צלצול (ורק אם הערוץ באמת השתנה, קורא את הווליום של אותו ערוץ)
     fun refreshBluetoothAndStreamState(context: Context) {
         updateBluetoothStatusOnly(context)
         val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
@@ -190,7 +189,6 @@ object AudioEngine {
                 }
                 activeStreamType = autoStream
                 if (activeStreamType == 0) {
-                    // חזרה ממצב שיחה למדיה: משחזרים בדיוק את הווליום שהמשתמש קבע ולא דורסים אותו!
                     currentTotalVolume = savedMediaBoostVolume.coerceIn(0, getEffectiveMaxVolume())
                 } else {
                     syncCurrentVolumeFromActiveStream(am)
@@ -317,7 +315,6 @@ object AudioEngine {
         }
     }
 
-    // מחשב הגברת DSP אך ורק מעל 100% - כך שבווליום 0%-100% העוצמה נשארת יציבה ומדויקת לחלוטין!
     private fun reapplyCurrentGainSafely() {
         if (!isBoosterActive || sliderOnlyNoBoostMode) {
             runCatching { loudnessEnhancer?.setTargetGain(0) }
@@ -457,8 +454,6 @@ object AudioEngine {
         runCatching { presetReverb?.enabled = effectsShouldRun }
     }
 
-    // חוק ברזל: כשמוגדר מחוון מותאם (sliderStyleIndex != 0), flags הוא תמיד 0 מוחלט!
-    // מחוון המערכת של הטלפון לעולם לא יכול להופיע כשמוגדר מחוון אחר.
     fun applyVolume(context: Context, totalPercent: Int, showNativeSystemUI: Boolean = false) {
         ensureAudioEffectsCreated()
         val maxAllowed = getEffectiveMaxVolume()
@@ -996,7 +991,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(s: SeekBar?) {}
         })
 
         val reverbNames = listOf("ללא", "חדר קטן", "חדר בינוני", "חדר גדול", "אולם בינוני", "אולם גדול", "פלטה אקוסטית")
@@ -1091,7 +1086,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     // =========================================================================
-    // קטגוריה 5: התאמה דינמית ל-18 המחוונים + גלגל צבעים מלא (16.7M Colors)
+    // קטגוריה 5: התאמה דינמית ל-18 המחוונים + גלגל צבעים מקצועי (Studio HSV)
     // =========================================================================
     private fun setupSliderDesignCategory() {
         val stylesContainer = findViewById<LinearLayout>(R.id.stylesGridContainer)
@@ -1160,10 +1155,9 @@ class MainActivity : AppCompatActivity() {
         fun updateHexPreviewLabel(color: Int, slotName: String) {
             val hex = String.format("#%06X", 0xFFFFFF and color)
             tvHexColor.text = "$slotName: $hex"
-            // שומר על קריאות הטקסט גם כשבוחרים צבע שחור כהה מאוד
             val hsv = FloatArray(3)
             Color.colorToHSV(color, hsv)
-            tvHexColor.setTextColor(if (hsv[2] < 0.25f) Color.WHITE else color)
+            tvHexColor.setTextColor(if (hsv[2] < 0.28f) Color.WHITE else color)
         }
 
         fun loadSlotColorIntoWheel(slotIdx: Int) {
@@ -1596,8 +1590,6 @@ class MainActivity : AppCompatActivity() {
         return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dpVal, resources.displayMetrics).roundToInt()
     }
 
-    // גם כאשר השירות טרם הופעל והמשתמש לוחץ על כפתורי הווליום בתוך האפליקציה,
-    // מחוון המערכת לא יקפוץ אם נבחר מחוון מותאם אישית (sliderStyleIndex != 0)!
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (VolumeOverlayService.instance == null) {
             val maxAllowed = AudioEngine.getEffectiveMaxVolume()
@@ -1649,7 +1641,7 @@ class MainActivity : AppCompatActivity() {
 }
 
 // =========================================================================
-// 3. שירות המחוון הצף: חסימה הרמטית של מחוון המערכת + מעבר ווליום ליניארי חלק
+// 3. שירות המחוון הצף: טשטוש מסך אופטי אמיתי (Pro fx-991 Frosted Blur) + Z-Order תקין
 // =========================================================================
 class VolumeOverlayService : AccessibilityService() {
 
@@ -1662,6 +1654,9 @@ class VolumeOverlayService : AccessibilityService() {
     private var maxSysVol = 15
 
     private var backdropTouchThroughView: View? = null
+    private var backdropParams: WindowManager.LayoutParams? = null
+    private var backdropBlurAnimator: ValueAnimator? = null
+
     private var badgeView: TextView? = null
     private var customOverlayCanvasView: CustomThemedSliderOverlayView? = null
     private var overlayParams: WindowManager.LayoutParams? = null
@@ -1721,7 +1716,6 @@ class VolumeOverlayService : AccessibilityService() {
                            keyCode == KeyEvent.KEYCODE_VOLUME_DOWN ||
                            keyCode == KeyEvent.KEYCODE_VOLUME_MUTE)
 
-        // אם נבחר מחוון מותאם (1..17), תמיד תופסים את כפתורי הווליום כדי שמחוון המערכת לא יוכל להופיע לעולם!
         val shouldInterceptVolume = AudioEngine.isBoosterActive ||
                                     AudioEngine.sliderOnlyNoBoostMode ||
                                     (AudioEngine.sliderStyleIndex != 0)
@@ -1803,7 +1797,6 @@ class VolumeOverlayService : AccessibilityService() {
         volumeKeyHandler.removeCallbacks(holdRepeatRunnable)
     }
 
-    // מעבר ווליום ליניארי, רציף ויציב לחלוטין מ-0% עד התקרה (100% / 200% / 300%) ללא קפיצות!
     private fun stepVolumeInDirection(direction: Int, stepAmount: Int) {
         AudioEngine.refreshBluetoothAndStreamState(this)
 
@@ -1898,7 +1891,50 @@ class VolumeOverlayService : AccessibilityService() {
         return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, resources.displayMetrics).roundToInt()
     }
 
-    @SuppressLint("ClickableViewAccessibility")
+    // בונה את שכבת הזכוכית הכהה המדורגת של ה-Pro fx-991 לפי אחוז התקדמות האנימציה (0f..1f)
+    private fun applyBackdropVisualProgress(progress: Float) {
+        val bdView = backdropTouchThroughView ?: return
+        val wm = windowManager ?: return
+        val lp = backdropParams ?: return
+        val cfg = SliderThemeManager.getCurrentConfig()
+
+        val p = progress.coerceIn(0f, 1f)
+        val blurTarget = if (cfg.blurBackgroundEnabled) {
+            ((cfg.blurStrengthPercent / 100f) * 125f * p).roundToInt()
+        } else 0
+
+        val blurTintAlpha = if (cfg.blurBackgroundEnabled) {
+            ((cfg.blurStrengthPercent / 100f) * 170f * p).roundToInt()
+        } else 0
+        val dimTintAlpha = if (cfg.dimBackgroundEnabled) {
+            ((cfg.dimStrengthPercent / 100f) * 215f * p).roundToInt()
+        } else 0
+
+        val baseAlpha = maxOf(blurTintAlpha, dimTintAlpha).coerceIn(0, 235)
+        val sideAlpha = (baseAlpha * 1.12f).roundToInt().coerceIn(0, 245)
+
+        // גרדיאנט זכוכית כהה חלבית עדינה כמו בתמונה של ה-Pro fx-991
+        val isRightSide = cfg.posXPercent >= 50
+        val startCol = Color.argb(if (isRightSide) (baseAlpha * 0.78f).roundToInt() else sideAlpha, 12, 16, 24)
+        val endCol = Color.argb(if (isRightSide) sideAlpha else (baseAlpha * 0.78f).roundToInt(), 18, 22, 32)
+
+        bdView.background = GradientDrawable(
+            GradientDrawable.Orientation.LEFT_RIGHT,
+            intArrayOf(startCol, endCol)
+        )
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            lp.blurBehindRadius = blurTarget
+            runCatching { lp.setBackgroundBlurRadius(blurTarget) }
+            if (bdView.isAttachedToWindow) {
+                runCatching { wm.updateViewLayout(bdView, lp) }
+            }
+        }
+    }
+
+    // =====================================================================
+    // טשטוש מסך אופטי אמיתי (Pro fx-991 Frosted Blur) ללא שבירת alpha של החלון!
+    // =====================================================================
     private fun updateFrostedGlassBackdrop(animateIn: Boolean) {
         val wm = windowManager ?: return
         val cfg = SliderThemeManager.getCurrentConfig()
@@ -1910,70 +1946,77 @@ class VolumeOverlayService : AccessibilityService() {
             return
         }
 
-        val blurTintAlpha = if (cfg.blurBackgroundEnabled) {
-            ((cfg.blurStrengthPercent / 100f) * 145).roundToInt()
-        } else 0
-        val dimTintAlpha = if (cfg.dimBackgroundEnabled) {
-            ((cfg.dimStrengthPercent / 100f) * 195).roundToInt()
-        } else 0
-        val combinedAlpha = maxOf(blurTintAlpha, dimTintAlpha).coerceIn(0, 225)
-        val frostedDarkColor = Color.argb(combinedAlpha, 14, 18, 28)
+        backdropBlurAnimator?.cancel()
 
+        // שכבת הטשטוש תמיד מוגדרת עם FLAG_NOT_TOUCHABLE כדי שלעולם לא תחסום את המחוון!
+        // זיהוי הנגיעה מחוץ למחוון מתבצע ישירות דרך FLAG_WATCH_OUTSIDE_TOUCH של המחוון עצמו.
         var flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                    WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-
-        if (!cfg.dismissOnOutsideTouch) {
-            flags = flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-        }
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                    WindowManager.LayoutParams.FLAG_DIM_BEHIND
 
         if (cfg.blurBackgroundEnabled && cfg.blurStrengthPercent > 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             flags = flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
         }
 
-        val backdropParams = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-            flags,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                blurBehindRadius = if (cfg.blurBackgroundEnabled) {
-                    ((cfg.blurStrengthPercent / 100f) * 110).roundToInt().coerceAtLeast(1)
-                } else {
-                    0
-                }
-            }
-        }
+        val targetDimAmount = if (cfg.dimBackgroundEnabled) {
+            ((cfg.dimStrengthPercent / 100f) * 0.55f).coerceIn(0f, 0.75f)
+        } else if (cfg.blurBackgroundEnabled) {
+            ((cfg.blurStrengthPercent / 100f) * 0.35f).coerceIn(0f, 0.50f)
+        } else 0f
+
+        val targetBlurRadius = if (cfg.blurBackgroundEnabled) {
+            ((cfg.blurStrengthPercent / 100f) * 125).roundToInt().coerceAtLeast(1)
+        } else 0
 
         if (backdropTouchThroughView == null) {
-            backdropTouchThroughView = View(this).apply {
-                setBackgroundColor(frostedDarkColor)
-                setOnTouchListener { _, ev ->
-                    if (!isInteractiveEditActive &&
-                        SliderThemeManager.getCurrentConfig().dismissOnOutsideTouch &&
-                        (ev.actionMasked == MotionEvent.ACTION_DOWN || ev.actionMasked == MotionEvent.ACTION_OUTSIDE)
-                    ) {
-                        hideHandler.removeCallbacks(hideRunnable)
-                        dismissOverlaysAnimated()
-                    }
-                    false
-                }
-                if (animateIn) {
-                    alpha = 0f
-                    animate().alpha(1f).setDuration(240L).setListener(null).start()
-                } else {
-                    alpha = 1f
+            val lp = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                flags,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                dimAmount = targetDimAmount
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    blurBehindRadius = if (animateIn) 1 else targetBlurRadius
+                    runCatching { setBackgroundBlurRadius(if (animateIn) 1 else targetBlurRadius) }
                 }
             }
-            runCatching { wm.addView(backdropTouchThroughView, backdropParams) }
+            backdropParams = lp
+            backdropTouchThroughView = View(this)
+            applyBackdropVisualProgress(if (animateIn) 0.1f else 1f)
+            runCatching { wm.addView(backdropTouchThroughView, lp) }
+
+            // אם המחוון כבר קיים, מוודאים שהוא נמצא *מעל* שכבת הטשטוש ב-Z-Order
+            customOverlayCanvasView?.let { slider ->
+                if (slider.isAttachedToWindow && overlayParams != null) {
+                    runCatching {
+                        wm.removeView(slider)
+                        wm.addView(slider, overlayParams)
+                    }
+                }
+            }
+
+            if (animateIn) {
+                backdropBlurAnimator = ValueAnimator.ofFloat(0.1f, 1f).apply {
+                    duration = 250L
+                    interpolator = DecelerateInterpolator()
+                    addUpdateListener { anim ->
+                        applyBackdropVisualProgress(anim.animatedValue as Float)
+                    }
+                    start()
+                }
+            }
         } else {
-            backdropTouchThroughView?.animate()?.cancel()
-            backdropTouchThroughView?.alpha = 1f
-            backdropTouchThroughView?.setBackgroundColor(frostedDarkColor)
-            runCatching { wm.updateViewLayout(backdropTouchThroughView, backdropParams) }
+            backdropParams?.let { lp ->
+                lp.flags = flags
+                lp.dimAmount = targetDimAmount
+                applyBackdropVisualProgress(1f)
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                    runCatching { wm.updateViewLayout(backdropTouchThroughView, lp) }
+                }
+            }
         }
     }
 
@@ -2015,8 +2058,10 @@ class VolumeOverlayService : AccessibilityService() {
         val styleChanged = (lastAnimatedStyleIndex != AudioEngine.sliderStyleIndex)
         lastAnimatedStyleIndex = AudioEngine.sliderStyleIndex
 
+        // 1. קודם מוסיפים/מעדכנים את שכבת הטשטוש כדי שתהיה מתחת למחוון
         updateFrostedGlassBackdrop(animateIn = isNewWindow || playEnterAnim)
 
+        // 2. מעליה מוסיפים/מעדכנים את המחוון עצמו
         if (customOverlayCanvasView == null) {
             customOverlayCanvasView = CustomThemedSliderOverlayView(
                 context = this,
@@ -2079,6 +2124,7 @@ class VolumeOverlayService : AccessibilityService() {
         }
     }
 
+    // מעלים באנימציה חלקה את רדיוס הטשטוש (125px -> 0px) במקביל לאנימציית היציאה של המחוון!
     fun dismissOverlaysAnimated() {
         removeBadge()
         val sliderView = customOverlayCanvasView
@@ -2087,16 +2133,20 @@ class VolumeOverlayService : AccessibilityService() {
             return
         }
 
-        backdropTouchThroughView?.let { bd ->
-            bd.animate()
-                .alpha(0f)
-                .setDuration(200L)
-                .setListener(object : AnimatorListenerAdapter() {
+        if (backdropTouchThroughView != null) {
+            backdropBlurAnimator?.cancel()
+            backdropBlurAnimator = ValueAnimator.ofFloat(1f, 0f).apply {
+                duration = 210L
+                addUpdateListener { anim ->
+                    applyBackdropVisualProgress(anim.animatedValue as Float)
+                }
+                addListener(object : AnimatorListenerAdapter() {
                     override fun onAnimationEnd(animation: Animator) {
                         removeBackdropImmediate()
                     }
                 })
-                .start()
+                start()
+            }
         }
 
         sliderView.playCustomExitAnimation(AudioEngine.sliderStyleIndex) {
@@ -2153,11 +2203,13 @@ class VolumeOverlayService : AccessibilityService() {
     }
 
     private fun removeBackdropImmediate() {
+        backdropBlurAnimator?.cancel()
+        backdropBlurAnimator = null
         backdropTouchThroughView?.let {
-            it.animate().cancel()
             runCatching { windowManager?.removeView(it) }
             backdropTouchThroughView = null
         }
+        backdropParams = null
     }
 
     private fun removeBadge() {
@@ -2205,3 +2257,4 @@ class VolumeOverlayService : AccessibilityService() {
         instance = null
     }
 }
+ 
