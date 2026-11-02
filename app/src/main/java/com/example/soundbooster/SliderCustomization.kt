@@ -344,7 +344,6 @@ class TrueColorWheelView(context: Context) : View(context) {
     private var currentSatRatio = 0.85f
     private var currentValRatio = 1.0f
 
-    // מצב גרירה פעיל כך שהאצבע לעולם לא "בורחת" מהטבעת או מהריבוע הפנימי בזמן תנועה!
     private var activeTouchZone = 0 // 0 = None, 1 = Hue Ring, 2 = SV Box, 3 = Swatches
 
     private val quickSwatches = intArrayOf(
@@ -368,7 +367,6 @@ class TrueColorWheelView(context: Context) : View(context) {
     var onWheelColorChanged: ((Int) -> Unit)? = null
 
     init {
-        // נדרש עבור ComposeShader של ריבוע הרוויה/בהירות
         setLayerType(LAYER_TYPE_SOFTWARE, null)
     }
 
@@ -443,7 +441,7 @@ class TrueColorWheelView(context: Context) : View(context) {
         canvas.drawCircle(hx, hy, ringThumbR, pointerOuterPaint)
         canvas.drawCircle(hx, hy, ringThumbR + 2f, pointerInnerPaint)
 
-        // 2. ציור ריבוע ה-Saturation & Brightness הפנימי (מאפשר לבחור כל צבע מלבן ועד שחור מוחלט!)
+        // 2. ציור ריבוע ה-Saturation & Brightness הפנימי
         val halfSide = innerRadius * 0.68f
         svBoxRect.set(cx - halfSide, cy - halfSide, cx + halfSide, cy + halfSide)
 
@@ -507,7 +505,6 @@ class TrueColorWheelView(context: Context) : View(context) {
             MotionEvent.ACTION_DOWN -> {
                 parent?.requestDisallowInterceptTouchEvent(true)
 
-                // בדיקה אם נלחץ צבע מהיר בשורה התחתונה
                 if (event.y >= wheelAreaH - 4f) {
                     activeTouchZone = 3
                     for (i in quickSwatches.indices) {
@@ -524,7 +521,6 @@ class TrueColorWheelView(context: Context) : View(context) {
                 val dy = event.y - cy
                 val dist = hypot(dx.toDouble(), dy.toDouble()).toFloat()
 
-                // בדיקה אם הלחיצה התחילה בריבוע ה-SV הפנימי או בטבעת ה-Hue החיצונית
                 if (svBoxRect.contains(event.x, event.y) || dist < innerRadius * 0.85f) {
                     activeTouchZone = 2
                     updateSVFromTouch(event.x, event.y)
@@ -942,7 +938,7 @@ object VectorIconRenderer {
 }
 
 // =========================================================================
-// 4. תצוגת המחוון הצף (ללא שום שינוי ווליום אוטומטי ב-onDraw!)
+// 4. תצוגת המחוון הצף (עם קצוות קפסולה עגולים ב-100% וללא גלישה מהשוליים!)
 // =========================================================================
 class CustomThemedSliderOverlayView(
     context: Context,
@@ -1130,6 +1126,7 @@ class CustomThemedSliderOverlayView(
             val safeVerticalInset = max(safePillRad * 0.65f, dp(22f))
 
             when (AudioEngine.sliderStyleIndex) {
+                // 1. עיצוב הזכוכית היוקרתי (צינור פנימי מעוגל לחלוטין ללא גלישה מהשוליים)
                 1 -> {
                     val highlightStrength = (cfg.extraParam1 / 100f).coerceIn(0.1f, 1f)
                     paint.style = Paint.Style.FILL
@@ -1152,7 +1149,7 @@ class CustomThemedSliderOverlayView(
                     val trackRight = w / 2f + tubeW / 2f
                     val trackTop = rect.top + safeVerticalInset + dp(12f)
                     val trackBot = rect.bottom - safeVerticalInset - dp(14f)
-                    val tubeCornerRad = min(cornerPx, tubeW / 2f)
+                    val tubeCornerRad = tubeW / 2f
 
                     innerRect.set(trackLeft, trackTop, trackRight, trackBot)
                     paint.color = applyAlpha(cfg.colors[3], 28)
@@ -1166,7 +1163,7 @@ class CustomThemedSliderOverlayView(
                     val fillTop = trackBot - (trackBot - trackTop) * ratio
                     fillRect.set(trackLeft, fillTop, trackRight, trackBot)
                     paint.shader = LinearGradient(0f, fillTop, 0f, trackBot, c0, c1, Shader.TileMode.CLAMP)
-                    canvas.drawRect(fillRect, paint)
+                    canvas.drawRoundRect(fillRect, tubeCornerRad, tubeCornerRad, paint)
                     paint.shader = null
                     canvas.restore()
 
@@ -1191,12 +1188,13 @@ class CustomThemedSliderOverlayView(
                     }
                 }
 
+                // 2. עיצוב פשוט ונקי (מתוקן עם קצוות קפסולה עגולים ב-100% גם ב-200% וגם בכל אחוז אחר!)
                 2 -> {
                     val widthFactor = 0.38f + (cfg.extraParam1 / 100f) * 0.52f
                     val barW = w * widthFactor
                     val left = (w - barW) / 2f
                     rect.set(left, dp(10f) + topEditOffset, left + barW, h - dp(10f))
-                    val rad = min(cornerPx, barW / 2f)
+                    val rad = (barW / 2f).coerceAtLeast(dp(18f))
 
                     paint.style = Paint.Style.FILL
                     paint.color = c1
@@ -1210,9 +1208,9 @@ class CustomThemedSliderOverlayView(
                     val fillTop = rect.bottom - rect.height() * ratio
                     innerRect.set(left, fillTop, left + barW, rect.bottom)
                     paint.color = c0
-                    canvas.drawRect(innerRect, paint)
+                    canvas.drawRoundRect(innerRect, rad, rad, paint)
 
-                    val inset = max(rad * 0.68f, dp(20f))
+                    val inset = max(rad * 0.75f, dp(22f))
                     paint.color = cfg.colors[2]
                     paint.textSize = txtPx * 0.9f
                     paint.textAlign = Paint.Align.CENTER
@@ -1290,7 +1288,7 @@ class CustomThemedSliderOverlayView(
                     fillRect.set(innerRect.left, fillTop, innerRect.right, trackBot)
                     paint.style = Paint.Style.FILL
                     paint.shader = LinearGradient(0f, fillTop, 0f, trackBot, c1, c0, Shader.TileMode.CLAMP)
-                    canvas.drawRect(fillRect, paint)
+                    canvas.drawRoundRect(fillRect, innerRad, innerRad, paint)
                     paint.shader = null
                     canvas.restore()
 
@@ -1408,7 +1406,7 @@ class CustomThemedSliderOverlayView(
                     val pillW = w * widthFactor
                     val left = (w - pillW) / 2f
                     rect.set(left, dp(8f) + topEditOffset, left + pillW, h - dp(8f))
-                    val rad = min(cornerPx.coerceAtLeast(pillW / 2f), pillW / 2f)
+                    val rad = (pillW / 2f).coerceAtLeast(dp(18f))
 
                     paint.style = Paint.Style.FILL
                     paint.color = c1
@@ -1422,9 +1420,9 @@ class CustomThemedSliderOverlayView(
                     val fillTop = rect.bottom - rect.height() * ratio
                     innerRect.set(left, fillTop, left + pillW, rect.bottom)
                     paint.color = c0
-                    canvas.drawRect(innerRect, paint)
+                    canvas.drawRoundRect(innerRect, rad, rad, paint)
 
-                    val inset = max(rad * 0.68f, dp(22f))
+                    val inset = max(rad * 0.72f, dp(22f))
                     paint.style = Paint.Style.FILL
                     paint.color = cfg.colors[3]
                     paint.textSize = txtPx
@@ -1494,7 +1492,7 @@ class CustomThemedSliderOverlayView(
                     val isRight = cfg.posXPercent >= 50
                     val xPos = if (isRight) w - barW - dp(4f) else dp(4f)
                     rect.set(xPos, dp(10f) + topEditOffset, xPos + barW, h - dp(10f))
-                    val rad = min(cornerPx, barW / 2f)
+                    val rad = barW / 2f
 
                     paint.style = Paint.Style.FILL
                     paint.color = c1
@@ -1508,7 +1506,7 @@ class CustomThemedSliderOverlayView(
                     val fillTop = rect.bottom - rect.height() * ratio
                     innerRect.set(xPos, fillTop, xPos + barW, rect.bottom)
                     paint.color = c0
-                    canvas.drawRect(innerRect, paint)
+                    canvas.drawRoundRect(innerRect, rad, rad, paint)
                     canvas.restore()
 
                     paint.color = cfg.colors[2]
@@ -1757,3 +1755,4 @@ class CustomThemedSliderOverlayView(
         }
     }
 }
+ 
