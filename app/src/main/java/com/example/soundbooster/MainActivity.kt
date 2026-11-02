@@ -991,7 +991,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(s: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
 
         val reverbNames = listOf("ללא", "חדר קטן", "חדר בינוני", "חדר גדול", "אולם בינוני", "אולם גדול", "פלטה אקוסטית")
@@ -1003,7 +1003,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(s: SeekBar?) {}
         })
 
         runCatching {
@@ -1925,7 +1925,6 @@ class VolumeOverlayService : AccessibilityService() {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             lp.blurBehindRadius = blurTarget
-            runCatching { lp.setBackgroundBlurRadius(blurTarget) }
             if (bdView.isAttachedToWindow) {
                 runCatching { wm.updateViewLayout(bdView, lp) }
             }
@@ -1980,7 +1979,6 @@ class VolumeOverlayService : AccessibilityService() {
                 dimAmount = targetDimAmount
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     blurBehindRadius = if (animateIn) 1 else targetBlurRadius
-                    runCatching { setBackgroundBlurRadius(if (animateIn) 1 else targetBlurRadius) }
                 }
             }
             backdropParams = lp
