@@ -28,6 +28,7 @@ import android.provider.Settings
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
@@ -462,7 +463,6 @@ object AudioEngine {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
         val now = SystemClock.elapsedRealtime()
 
-        // מחוון המערכת מורשה להופיע אך ורק אם המשתמש בחר בסגנון 0!
         val allowNativeUI = (sliderStyleIndex == 0) &&
                             showNativeSystemUI &&
                             (now > bootCooldownUntil) &&
@@ -619,7 +619,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun syncVolumeRangeUI() {
+    private fun syncVolumeRangeUI() {
         isUpdatingControlsProgrammatically = true
         val maxAllowed = AudioEngine.getEffectiveMaxVolume()
         seekTotalVolume.max = maxAllowed
@@ -990,8 +990,8 @@ class MainActivity : AppCompatActivity() {
                     runCatching { AudioEngine.virtualizer?.setStrength(progress.toShort()) }
                 }
             }
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStartTrackingTouch(s: SeekBar?) {}
+            override fun onStopTrackingTouch(s: SeekBar?) {}
         })
 
         val reverbNames = listOf("ללא", "חדר קטן", "חדר בינוני", "חדר גדול", "אולם בינוני", "אולם גדול", "פלטה אקוסטית")
@@ -1002,7 +1002,7 @@ class MainActivity : AppCompatActivity() {
                     runCatching { AudioEngine.presetReverb?.preset = progress.toShort() }
                 }
             }
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStartTrackingTouch(s: SeekBar?) {}
             override fun onStopTrackingTouch(s: SeekBar?) {}
         })
 
@@ -1085,9 +1085,6 @@ class MainActivity : AppCompatActivity() {
         refreshHeaderStatusText()
     }
 
-    // =========================================================================
-    // קטגוריה 5: התאמה דינמית ל-18 המחוונים + גלגל צבעים מקצועי (Studio HSV)
-    // =========================================================================
     private fun setupSliderDesignCategory() {
         val stylesContainer = findViewById<LinearLayout>(R.id.stylesGridContainer)
         val tvSelectedStyleName = findViewById<TextView>(R.id.tvSelectedStyleName)
@@ -1590,26 +1587,26 @@ class MainActivity : AppCompatActivity() {
         return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dpVal, resources.displayMetrics).roundToInt()
     }
 
-    // בולע את מקשי הווליום גם כשנמצאים בתוך האפליקציה עצמה כדי שמחוון המערכת לא יופיע לעולם!
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        val keyCode = event.keyCode
-        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
-            val svc = VolumeOverlayService.instance
-            if (svc != null) {
-                return svc.handleVolumeKeyEventDirect(event)
-            } else {
-                if (event.action == KeyEvent.ACTION_DOWN) {
-                    val maxAllowed = AudioEngine.getEffectiveMaxVolume()
-                    val showSysUI = (AudioEngine.sliderStyleIndex == 0)
-                    val delta = if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) 6 else -6
-                    val next = (AudioEngine.currentTotalVolume + delta).coerceIn(0, maxAllowed)
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (VolumeOverlayService.instance == null) {
+            val maxAllowed = AudioEngine.getEffectiveMaxVolume()
+            val showSysUI = (AudioEngine.sliderStyleIndex == 0)
+            when (keyCode) {
+                KeyEvent.KEYCODE_VOLUME_UP -> {
+                    val next = (AudioEngine.currentTotalVolume + 6).coerceAtMost(maxAllowed)
                     seekTotalVolume.progress = next
                     AudioEngine.applyVolume(this, next, showNativeSystemUI = showSysUI)
+                    return true
                 }
-                return true
+                KeyEvent.KEYCODE_VOLUME_DOWN -> {
+                    val next = (AudioEngine.currentTotalVolume - 6).coerceAtLeast(0)
+                    seekTotalVolume.progress = next
+                    AudioEngine.applyVolume(this, next, showNativeSystemUI = showSysUI)
+                    return true
+                }
             }
         }
-        return super.dispatchKeyEvent(event)
+        return super.onKeyDown(keyCode, event)
     }
 
     private fun applyPreset(offsetsPercent: List<Int>, bass: Int, surround: Int, reverb: Int) {
@@ -1641,7 +1638,7 @@ class MainActivity : AppCompatActivity() {
 }
 
 // =========================================================================
-// 3. שירות המחוון הצף: חסימה הרמטית של מחוון המערכת (ללא תקיעת isVolUpPressed!)
+// 3. שירות המחוון הצף: טשטוש מסך אופטי אמיתי + Z-Order תיקון ACTION_CANCEL
 // =========================================================================
 class VolumeOverlayService : AccessibilityService() {
 
@@ -1707,7 +1704,6 @@ class VolumeOverlayService : AccessibilityService() {
         return handleVolumeKeyEventDirect(event)
     }
 
-    // מטפל במקשי הווליום בלי שום תלות ב-isInternalVolumeChange (שגרם בעבר לדליפת מחוון המערכת!)
     fun handleVolumeKeyEventDirect(event: KeyEvent): Boolean {
         val keyCode = event.keyCode
         val isVolumeKey = (keyCode == KeyEvent.KEYCODE_VOLUME_UP ||
@@ -1721,12 +1717,13 @@ class VolumeOverlayService : AccessibilityService() {
         if (!shouldInterceptVolume) return false
 
         if (!isVolumeKey) {
-            // אם נלחץ כפתור ההפעלה (Power) לצילום מסך, עוצרים את הלחיצה הרציפה
             if (keyCode == KeyEvent.KEYCODE_POWER && (isVolUpPressed || isVolDownPressed)) {
                 cancelVolumeHold()
             }
             return false
         }
+
+        if (AudioEngine.isInternalVolumeChange) return true
 
         if (isInteractiveEditActive) {
             if (event.action == KeyEvent.ACTION_DOWN) {
@@ -1758,7 +1755,6 @@ class VolumeOverlayService : AccessibilityService() {
                     volDownDownTimestamp = now
                 }
 
-                // בדיקה אמיתית אם שני כפתורי הווליום נלחצו יחד בו-זמנית (פחות מ-250ms הפרש)
                 if (isVolUpPressed && isVolDownPressed && kotlin.math.abs(volUpDownTimestamp - volDownDownTimestamp) < 250L) {
                     cancelVolumeHold()
                     return false
@@ -1767,7 +1763,6 @@ class VolumeOverlayService : AccessibilityService() {
                 if (event.repeatCount == 0) {
                     val dir = if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) 1 else -1
                     activeHoldDirection = dir
-                    // ביצוע הצעד הראשון מיד ובלי דיליי, והפעלת טיימר ללחיצה רציפה!
                     stepVolumeInDirection(dir, stepAmount = 6)
                     volumeKeyHandler.removeCallbacks(holdRepeatRunnable)
                     volumeKeyHandler.postDelayed(holdRepeatRunnable, 280L)
@@ -1775,7 +1770,8 @@ class VolumeOverlayService : AccessibilityService() {
                 return true
             }
 
-            KeyEvent.ACTION_UP, KeyEvent.ACTION_CANCEL -> {
+            // תיקון קריטי: שימוש ב-MotionEvent.ACTION_CANCEL במקום ACTION_CANCEL גלובלי שגרם לשגיאת הקומפילציה
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL, KeyEvent.ACTION_UP -> {
                 if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) isVolUpPressed = false
                 if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) isVolDownPressed = false
 
