@@ -462,7 +462,7 @@ object AudioEngine {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
         val now = SystemClock.elapsedRealtime()
 
-        // מחוון המערכת מורשה להופיע אך ורק אם נבחר סגנון 0!
+        // מחוון המערכת מורשה להופיע אך ורק אם המשתמש בחר בסגנון 0!
         val allowNativeUI = (sliderStyleIndex == 0) &&
                             showNativeSystemUI &&
                             (now > bootCooldownUntil) &&
@@ -619,7 +619,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun syncVolumeRangeUI() {
+    fun syncVolumeRangeUI() {
         isUpdatingControlsProgrammatically = true
         val maxAllowed = AudioEngine.getEffectiveMaxVolume()
         seekTotalVolume.max = maxAllowed
@@ -1590,26 +1590,26 @@ class MainActivity : AppCompatActivity() {
         return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dpVal, resources.displayMetrics).roundToInt()
     }
 
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (VolumeOverlayService.instance == null) {
-            val maxAllowed = AudioEngine.getEffectiveMaxVolume()
-            val showSysUI = (AudioEngine.sliderStyleIndex == 0)
-            when (keyCode) {
-                KeyEvent.KEYCODE_VOLUME_UP -> {
-                    val next = (AudioEngine.currentTotalVolume + 6).coerceAtMost(maxAllowed)
+    // בולע את מקשי הווליום גם כשנמצאים בתוך האפליקציה עצמה כדי שמחוון המערכת לא יופיע לעולם!
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val keyCode = event.keyCode
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+            val svc = VolumeOverlayService.instance
+            if (svc != null) {
+                return svc.handleVolumeKeyEventDirect(event)
+            } else {
+                if (event.action == KeyEvent.ACTION_DOWN) {
+                    val maxAllowed = AudioEngine.getEffectiveMaxVolume()
+                    val showSysUI = (AudioEngine.sliderStyleIndex == 0)
+                    val delta = if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) 6 else -6
+                    val next = (AudioEngine.currentTotalVolume + delta).coerceIn(0, maxAllowed)
                     seekTotalVolume.progress = next
                     AudioEngine.applyVolume(this, next, showNativeSystemUI = showSysUI)
-                    return true
                 }
-                KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                    val next = (AudioEngine.currentTotalVolume - 6).coerceAtLeast(0)
-                    seekTotalVolume.progress = next
-                    AudioEngine.applyVolume(this, next, showNativeSystemUI = showSysUI)
-                    return true
-                }
+                return true
             }
         }
-        return super.onKeyDown(keyCode, event)
+        return super.dispatchKeyEvent(event)
     }
 
     private fun applyPreset(offsetsPercent: List<Int>, bass: Int, surround: Int, reverb: Int) {
@@ -1641,7 +1641,7 @@ class MainActivity : AppCompatActivity() {
 }
 
 // =========================================================================
-// 3. שירות המחוון הצף: טשטוש מסך אופטי אמיתי (Pro fx-991 Frosted Blur) + Z-Order תקין
+// 3. שירות המחוון הצף: חסימה הרמטית של מחוון המערכת (ללא תקיעת isVolUpPressed!)
 // =========================================================================
 class VolumeOverlayService : AccessibilityService() {
 
@@ -1676,22 +1676,15 @@ class VolumeOverlayService : AccessibilityService() {
     private val volumeKeyHandler = Handler(Looper.getMainLooper())
     private var isVolUpPressed = false
     private var isVolDownPressed = false
+    private var volUpDownTimestamp = 0L
+    private var volDownDownTimestamp = 0L
     private var activeHoldDirection = 0
-    private var pendingSingleStepApplied = false
-    private var comboShortcutDetected = false
-
-    private val delayedInitialStepRunnable = Runnable {
-        if (comboShortcutDetected || activeHoldDirection == 0) return@Runnable
-        pendingSingleStepApplied = true
-        stepVolumeInDirection(activeHoldDirection, stepAmount = 6)
-        volumeKeyHandler.postDelayed(holdRepeatRunnable, 220L)
-    }
 
     private val holdRepeatRunnable = object : Runnable {
         override fun run() {
-            if (comboShortcutDetected || activeHoldDirection == 0) return
+            if (activeHoldDirection == 0) return
             stepVolumeInDirection(activeHoldDirection, stepAmount = 5)
-            volumeKeyHandler.postDelayed(this, 90L)
+            volumeKeyHandler.postDelayed(this, 85L)
         }
     }
 
@@ -1711,6 +1704,11 @@ class VolumeOverlayService : AccessibilityService() {
     fun isEditModeActive(): Boolean = isInteractiveEditActive
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
+        return handleVolumeKeyEventDirect(event)
+    }
+
+    // מטפל במקשי הווליום בלי שום תלות ב-isInternalVolumeChange (שגרם בעבר לדליפת מחוון המערכת!)
+    fun handleVolumeKeyEventDirect(event: KeyEvent): Boolean {
         val keyCode = event.keyCode
         val isVolumeKey = (keyCode == KeyEvent.KEYCODE_VOLUME_UP ||
                            keyCode == KeyEvent.KEYCODE_VOLUME_DOWN ||
@@ -1720,16 +1718,15 @@ class VolumeOverlayService : AccessibilityService() {
                                     AudioEngine.sliderOnlyNoBoostMode ||
                                     (AudioEngine.sliderStyleIndex != 0)
 
-        if (!shouldInterceptVolume) return super.onKeyEvent(event)
+        if (!shouldInterceptVolume) return false
 
         if (!isVolumeKey) {
-            if (isVolUpPressed || isVolDownPressed) {
-                cancelVolumeHoldForSystemShortcut()
+            // אם נלחץ כפתור ההפעלה (Power) לצילום מסך, עוצרים את הלחיצה הרציפה
+            if (keyCode == KeyEvent.KEYCODE_POWER && (isVolUpPressed || isVolDownPressed)) {
+                cancelVolumeHold()
             }
-            return super.onKeyEvent(event)
+            return false
         }
-
-        if (AudioEngine.isInternalVolumeChange) return true
 
         if (isInteractiveEditActive) {
             if (event.action == KeyEvent.ACTION_DOWN) {
@@ -1749,51 +1746,52 @@ class VolumeOverlayService : AccessibilityService() {
             return true
         }
 
+        val now = SystemClock.elapsedRealtime()
+
         when (event.action) {
             KeyEvent.ACTION_DOWN -> {
-                if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) isVolUpPressed = true
-                if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) isVolDownPressed = true
+                if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
+                    isVolUpPressed = true
+                    volUpDownTimestamp = now
+                } else if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+                    isVolDownPressed = true
+                    volDownDownTimestamp = now
+                }
 
-                if (isVolUpPressed && isVolDownPressed) {
-                    cancelVolumeHoldForSystemShortcut()
+                // בדיקה אמיתית אם שני כפתורי הווליום נלחצו יחד בו-זמנית (פחות מ-250ms הפרש)
+                if (isVolUpPressed && isVolDownPressed && kotlin.math.abs(volUpDownTimestamp - volDownDownTimestamp) < 250L) {
+                    cancelVolumeHold()
                     return false
                 }
 
-                if (event.repeatCount == 0 && activeHoldDirection == 0) {
-                    comboShortcutDetected = false
-                    pendingSingleStepApplied = false
-                    activeHoldDirection = if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) 1 else -1
-                    volumeKeyHandler.removeCallbacks(delayedInitialStepRunnable)
+                if (event.repeatCount == 0) {
+                    val dir = if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) 1 else -1
+                    activeHoldDirection = dir
+                    // ביצוע הצעד הראשון מיד ובלי דיליי, והפעלת טיימר ללחיצה רציפה!
+                    stepVolumeInDirection(dir, stepAmount = 6)
                     volumeKeyHandler.removeCallbacks(holdRepeatRunnable)
-                    volumeKeyHandler.postDelayed(delayedInitialStepRunnable, 115L)
+                    volumeKeyHandler.postDelayed(holdRepeatRunnable, 280L)
                 }
                 return true
             }
 
-            KeyEvent.ACTION_UP -> {
-                val dirBeforeRelease = activeHoldDirection
+            KeyEvent.ACTION_UP, KeyEvent.ACTION_CANCEL -> {
                 if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) isVolUpPressed = false
                 if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) isVolDownPressed = false
 
-                volumeKeyHandler.removeCallbacks(delayedInitialStepRunnable)
-                volumeKeyHandler.removeCallbacks(holdRepeatRunnable)
-                activeHoldDirection = 0
-
-                if (!comboShortcutDetected && !pendingSingleStepApplied && dirBeforeRelease != 0) {
-                    stepVolumeInDirection(dirBeforeRelease, stepAmount = 6)
+                if (!isVolUpPressed && !isVolDownPressed) {
+                    cancelVolumeHold()
                 }
-                comboShortcutDetected = false
-                pendingSingleStepApplied = false
                 return true
             }
         }
         return true
     }
 
-    private fun cancelVolumeHoldForSystemShortcut() {
-        comboShortcutDetected = true
+    private fun cancelVolumeHold() {
+        isVolUpPressed = false
+        isVolDownPressed = false
         activeHoldDirection = 0
-        volumeKeyHandler.removeCallbacks(delayedInitialStepRunnable)
         volumeKeyHandler.removeCallbacks(holdRepeatRunnable)
     }
 
@@ -1891,7 +1889,6 @@ class VolumeOverlayService : AccessibilityService() {
         return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, resources.displayMetrics).roundToInt()
     }
 
-    // בונה את שכבת הזכוכית הכהה המדורגת של ה-Pro fx-991 לפי אחוז התקדמות האנימציה (0f..1f)
     private fun applyBackdropVisualProgress(progress: Float) {
         val bdView = backdropTouchThroughView ?: return
         val wm = windowManager ?: return
@@ -1913,7 +1910,6 @@ class VolumeOverlayService : AccessibilityService() {
         val baseAlpha = maxOf(blurTintAlpha, dimTintAlpha).coerceIn(0, 235)
         val sideAlpha = (baseAlpha * 1.12f).roundToInt().coerceIn(0, 245)
 
-        // גרדיאנט זכוכית כהה חלבית עדינה כמו בתמונה של ה-Pro fx-991
         val isRightSide = cfg.posXPercent >= 50
         val startCol = Color.argb(if (isRightSide) (baseAlpha * 0.78f).roundToInt() else sideAlpha, 12, 16, 24)
         val endCol = Color.argb(if (isRightSide) sideAlpha else (baseAlpha * 0.78f).roundToInt(), 18, 22, 32)
@@ -1931,9 +1927,6 @@ class VolumeOverlayService : AccessibilityService() {
         }
     }
 
-    // =====================================================================
-    // טשטוש מסך אופטי אמיתי (Pro fx-991 Frosted Blur) ללא שבירת alpha של החלון!
-    // =====================================================================
     private fun updateFrostedGlassBackdrop(animateIn: Boolean) {
         val wm = windowManager ?: return
         val cfg = SliderThemeManager.getCurrentConfig()
@@ -1947,8 +1940,6 @@ class VolumeOverlayService : AccessibilityService() {
 
         backdropBlurAnimator?.cancel()
 
-        // שכבת הטשטוש תמיד מוגדרת עם FLAG_NOT_TOUCHABLE כדי שלעולם לא תחסום את המחוון!
-        // זיהוי הנגיעה מחוץ למחוון מתבצע ישירות דרך FLAG_WATCH_OUTSIDE_TOUCH של המחוון עצמו.
         var flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
@@ -1986,7 +1977,6 @@ class VolumeOverlayService : AccessibilityService() {
             applyBackdropVisualProgress(if (animateIn) 0.1f else 1f)
             runCatching { wm.addView(backdropTouchThroughView, lp) }
 
-            // אם המחוון כבר קיים, מוודאים שהוא נמצא *מעל* שכבת הטשטוש ב-Z-Order
             customOverlayCanvasView?.let { slider ->
                 if (slider.isAttachedToWindow && overlayParams != null) {
                     runCatching {
@@ -2056,10 +2046,8 @@ class VolumeOverlayService : AccessibilityService() {
         val styleChanged = (lastAnimatedStyleIndex != AudioEngine.sliderStyleIndex)
         lastAnimatedStyleIndex = AudioEngine.sliderStyleIndex
 
-        // 1. קודם מוסיפים/מעדכנים את שכבת הטשטוש כדי שתהיה מתחת למחוון
         updateFrostedGlassBackdrop(animateIn = isNewWindow || playEnterAnim)
 
-        // 2. מעליה מוסיפים/מעדכנים את המחוון עצמו
         if (customOverlayCanvasView == null) {
             customOverlayCanvasView = CustomThemedSliderOverlayView(
                 context = this,
@@ -2122,7 +2110,6 @@ class VolumeOverlayService : AccessibilityService() {
         }
     }
 
-    // מעלים באנימציה חלקה את רדיוס הטשטוש (125px -> 0px) במקביל לאנימציית היציאה של המחוון!
     fun dismissOverlaysAnimated() {
         removeBadge()
         val sliderView = customOverlayCanvasView
@@ -2236,10 +2223,10 @@ class VolumeOverlayService : AccessibilityService() {
         if (now < AudioEngine.suppressSystemUILoopUntil || AudioEngine.isInternalVolumeChange) return
 
         val pkg = event?.packageName?.toString() ?: ""
-        if (pkg.contains("systemui", ignoreCase = true) && (isVolUpPressed || isVolDownPressed)) {
+        if (pkg.contains("systemui", ignoreCase = true)) {
             val cls = event?.className?.toString() ?: ""
             if (cls.contains("Screenshot", ignoreCase = true) || cls.contains("GlobalActions", ignoreCase = true)) {
-                cancelVolumeHoldForSystemShortcut()
+                cancelVolumeHold()
                 removeAllOverlaysImmediate()
             }
         }
