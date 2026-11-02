@@ -1279,7 +1279,7 @@
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
-                <!-- 2. גלגל צבעים דינמי עם עד 6 חריצי צבע ספציפיים למחוון שנבחר -->
+                <!-- 2. גלגל צבעים מקצועי (Studio HSV Ring + 2D Saturation/Value Box + 12 Swatches) -->
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -1298,7 +1298,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="צבעי אלמנטים ייחודיים למחוון הנוכחי"
+                            android:text="בורר צבעים מקצועי (16.7 מיליון צבעים)"
                             android:textColor="#FFFFFF"
                             android:textSize="16sp"
                             android:textStyle="bold" />
@@ -1308,7 +1308,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="2dp"
                             android:layout_marginBottom="10dp"
-                            android:text="בחר איזה אלמנט במחוון הנוכחי לצבוע. כל 3 המחוונים למטה משנים את צבעי הגלגל עצמו בלי להזיז את הבורר:"
+                            android:text="בחר רכיב לצביעה. סובב את הטבעת החיצונית לבחירת הגוון, וגרור בתוך הריבוע הפנימי לבחירת רוויה ובהירות (מלבן ועד שחור מוחלט):"
                             android:textColor="#A0AAB8"
                             android:textSize="11sp" />
 
@@ -1328,7 +1328,7 @@
                         <FrameLayout
                             android:id="@+id/colorWheelHolder"
                             android:layout_width="match_parent"
-                            android:layout_height="220dp"
+                            android:layout_height="260dp"
                             android:layout_gravity="center" />
 
                         <TextView
@@ -1346,7 +1346,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="10dp"
-                            android:text="בהירות הגלגל (Brightness - משנה את הגלגל עצמו)"
+                            android:text="בהירות מדויקת (0% שחור מוחלט ↔ 100% מואר)"
                             android:textColor="#00E676"
                             android:textSize="12sp"
                             android:textStyle="bold" />
@@ -1364,7 +1364,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="8dp"
-                            android:text="רוויית הגלגל (Saturation - משנה את הגלגל עצמו)"
+                            android:text="עוצמת רוויית צבע (0% לבן/אפור ↔ 100% צבע עז)"
                             android:textColor="#BB86FC"
                             android:textSize="12sp"
                             android:textStyle="bold" />
@@ -1382,7 +1382,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="8dp"
-                            android:text="סיבוב גווני הגלגל (Hue Shift - משנה את הגלגל עצמו)"
+                            android:text="גוון קשת הצבעים (Hue 0° - 360°)"
                             android:textColor="#00E5FF"
                             android:textSize="12sp"
                             android:textStyle="bold" />
@@ -1876,7 +1876,6 @@
                             android:layout_marginBottom="10dp"
                             android:background="#263042" />
 
-                        <!-- אפשרות חדשה: העלמת המחוון והטשטוש מיד בנגיעה מחוץ למחוון עם האנימציה שלו -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
