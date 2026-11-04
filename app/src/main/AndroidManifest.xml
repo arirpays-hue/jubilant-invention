@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <application
         android:allowBackup="true"
@@ -9,7 +11,7 @@
         android:label="Sound Booster Pro"
         android:supportsRtl="true"
         android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar">
-        
+
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -19,7 +21,7 @@
             </intent-filter>
         </activity>
 
-        <!-- שירות ההשתלטות על כפתורי הווליום והמחוון הצף -->
+        <!-- שירות ההשתלטות על כפתורי הווליום, בועית ה-HD הנגררת וזיהוי אפליקציות -->
         <service
             android:name=".VolumeOverlayService"
             android:exported="true"
@@ -33,6 +35,29 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
+        <!-- אריח הגדרות מהירות בווילון ההתראות (Quick Settings Tile) -->
+        <service
+            android:name=".BoosterTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_launcher"
+            android:label="Sound Booster HD"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <!-- מקלט אוטומציה וקיצורי דרך (Tasker / Routines / Intent API) -->
+        <receiver
+            android:name=".AutomationReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.example.soundbooster.ACTION_SET_BOOST" />
+                <action android:name="com.example.soundbooster.ACTION_TOGGLE_BOOSTER" />
+            </intent-filter>
+        </receiver>
+
     </application>
 
 </manifest>
+ 
