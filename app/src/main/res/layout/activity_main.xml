@@ -1,6 +1,8 @@
+
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/rootMainLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#0B0E14"
@@ -63,70 +65,111 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-    <!-- סרגל ניווט 4 קטגוריות -->
-    <LinearLayout
+    <!-- סרגל ניווט 7 קטגוריות נגלל אופקית -->
+    <HorizontalScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="12dp"
         android:background="#121722"
-        android:orientation="horizontal"
-        android:padding="4dp">
+        android:padding="4dp"
+        android:scrollbars="none">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/tabBtnVolume"
-            style="@style/Widget.MaterialComponents.Button.TextButton"
-            android:layout_width="0dp"
-            android:layout_height="42dp"
-            android:layout_marginEnd="4dp"
-            android:layout_weight="1"
-            android:backgroundTint="#00E676"
-            android:text="עוצמה"
-            android:textColor="#0B0E14"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            app:cornerRadius="12dp" />
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/tabBtnQuality"
-            style="@style/Widget.MaterialComponents.Button.TextButton"
-            android:layout_width="0dp"
-            android:layout_height="42dp"
-            android:layout_marginEnd="4dp"
-            android:layout_weight="1"
-            android:backgroundTint="#00000000"
-            android:text="איכות ו-AI"
-            android:textColor="#A0AAB8"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            app:cornerRadius="12dp" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/tabBtnVolume"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="42dp"
+                android:layout_marginEnd="4dp"
+                android:backgroundTint="#00E676"
+                android:text="עוצמה"
+                android:textColor="#0B0E14"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                app:cornerRadius="12dp" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/tabBtnEffects"
-            style="@style/Widget.MaterialComponents.Button.TextButton"
-            android:layout_width="0dp"
-            android:layout_height="42dp"
-            android:layout_marginEnd="4dp"
-            android:layout_weight="1"
-            android:backgroundTint="#00000000"
-            android:text="אפקטים"
-            android:textColor="#A0AAB8"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            app:cornerRadius="12dp" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/tabBtnQuality"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="42dp"
+                android:layout_marginEnd="4dp"
+                android:backgroundTint="#00000000"
+                android:text="איכות ו-AI"
+                android:textColor="#A0AAB8"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                app:cornerRadius="12dp" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/tabBtnEq"
-            style="@style/Widget.MaterialComponents.Button.TextButton"
-            android:layout_width="0dp"
-            android:layout_height="42dp"
-            android:layout_weight="1"
-            android:backgroundTint="#00000000"
-            android:text="אקולייזר"
-            android:textColor="#A0AAB8"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            app:cornerRadius="12dp" />
-    </LinearLayout>
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/tabBtnHearing"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="42dp"
+                android:layout_marginEnd="4dp"
+                android:backgroundTint="#00000000"
+                android:text="איזון ושמיעה"
+                android:textColor="#A0AAB8"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                app:cornerRadius="12dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/tabBtnEffects"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="42dp"
+                android:layout_marginEnd="4dp"
+                android:backgroundTint="#00000000"
+                android:text="אפקטים"
+                android:textColor="#A0AAB8"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                app:cornerRadius="12dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/tabBtnEq"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="42dp"
+                android:layout_marginEnd="4dp"
+                android:backgroundTint="#00000000"
+                android:text="אקולייזר"
+                android:textColor="#A0AAB8"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                app:cornerRadius="12dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/tabBtnAutomation"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="42dp"
+                android:layout_marginEnd="4dp"
+                android:backgroundTint="#00000000"
+                android:text="אוטומציה"
+                android:textColor="#A0AAB8"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                app:cornerRadius="12dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/tabBtnSystem"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="42dp"
+                android:backgroundTint="#00000000"
+                android:text="מערכת וגיבוי"
+                android:textColor="#A0AAB8"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                app:cornerRadius="12dp" />
+        </LinearLayout>
+    </HorizontalScrollView>
 
     <ScrollView
         android:layout_width="match_parent"
@@ -138,7 +181,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content">
 
-            <!-- ================= קטגוריה 1: עוצמה, רטט, אוטומציה, Per-App, רעש סביבתי וטיימר שינה ================= -->
+            <!-- ================= קטגוריה 1: עוצמה, הגברת 300%, פרופילי ניתוב ושירות המערכת ================= -->
             <LinearLayout
                 android:id="@+id/sectionVolume"
                 android:layout_width="match_parent"
@@ -474,7 +517,7 @@
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="בועית חיווי צפה נגררת קבועה (Draggable Mini Pill)"
+                                    android:text="בועית חיווי צפה נגררת + Mini-EQ בלחיצה כפולה"
                                     android:textColor="#BB86FC"
                                     android:textSize="13sp"
                                     android:textStyle="bold" />
@@ -482,7 +525,7 @@
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="מציג את בועית ה-HD בכל עוצמה ומאפשר לגרור אותה באצבע לכל מקום במסך"
+                                    android:text="מציג את בועית ה-HD, ניתן לגרירה במסך, ולחיצה כפולה פותחת מיני-אקולייזר צף"
                                     android:textColor="#A0AAB8"
                                     android:textSize="11sp" />
                             </LinearLayout>
@@ -606,372 +649,6 @@
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
-                <!-- כרטיס חדש: Per-App Volume & EQ Profiles (עוצמה ופרופיל עצמאי לכל אפליקציה) -->
-                <com.google.android.material.card.MaterialCardView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="16dp"
-                    app:cardBackgroundColor="#161B26"
-                    app:cardCornerRadius="20dp"
-                    app:strokeColor="#00E676"
-                    app:strokeWidth="1dp">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:padding="18dp">
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal">
-
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:orientation="vertical">
-
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="פרופיל עוצמה עצמאי לכל אפליקציה (Per-App Volume)"
-                                    android:textColor="#00E676"
-                                    android:textSize="15sp"
-                                    android:textStyle="bold" />
-
-                                <TextView
-                                    android:id="@+id/tvPerAppStatusInfo"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="2dp"
-                                    android:text="מזהה אוטומטית פתיחת YouTube, Spotify, TikTok או משחקים ומתאים ווליום"
-                                    android:textColor="#A0AAB8"
-                                    android:textSize="11sp" />
-                            </LinearLayout>
-
-                            <androidx.appcompat.widget.SwitchCompat
-                                android:id="@+id/switchPerAppVolume"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:checked="true"
-                                app:thumbTint="#00E676" />
-                        </LinearLayout>
-
-                        <HorizontalScrollView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="10dp"
-                            android:scrollbars="none">
-
-                            <LinearLayout
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:orientation="horizontal">
-
-                                <com.google.android.material.button.MaterialButton
-                                    android:id="@+id/btnAppSlotYoutube"
-                                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="40dp"
-                                    android:layout_marginEnd="6dp"
-                                    android:text="YouTube"
-                                    android:textColor="#00E676"
-                                    android:textSize="10sp"
-                                    app:cornerRadius="10dp"
-                                    app:strokeColor="#00E676" />
-
-                                <com.google.android.material.button.MaterialButton
-                                    android:id="@+id/btnAppSlotSpotify"
-                                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="40dp"
-                                    android:layout_marginEnd="6dp"
-                                    android:text="Spotify / Music"
-                                    android:textColor="#A0AAB8"
-                                    android:textSize="10sp"
-                                    app:cornerRadius="10dp"
-                                    app:strokeColor="#3A465E" />
-
-                                <com.google.android.material.button.MaterialButton
-                                    android:id="@+id/btnAppSlotSocial"
-                                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="40dp"
-                                    android:layout_marginEnd="6dp"
-                                    android:text="TikTok / Reels"
-                                    android:textColor="#A0AAB8"
-                                    android:textSize="10sp"
-                                    app:cornerRadius="10dp"
-                                    app:strokeColor="#3A465E" />
-
-                                <com.google.android.material.button.MaterialButton
-                                    android:id="@+id/btnAppSlotGaming"
-                                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="40dp"
-                                    android:layout_marginEnd="6dp"
-                                    android:text="משחקים (Games)"
-                                    android:textColor="#A0AAB8"
-                                    android:textSize="10sp"
-                                    app:cornerRadius="10dp"
-                                    app:strokeColor="#3A465E" />
-
-                                <com.google.android.material.button.MaterialButton
-                                    android:id="@+id/btnAppSlotVoice"
-                                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="40dp"
-                                    android:text="WhatsApp / פודקאסט"
-                                    android:textColor="#A0AAB8"
-                                    android:textSize="10sp"
-                                    app:cornerRadius="10dp"
-                                    app:strokeColor="#3A465E" />
-                            </LinearLayout>
-                        </HorizontalScrollView>
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="10dp"
-                            android:orientation="horizontal">
-
-                            <TextView
-                                android:id="@+id/tvPerAppTargetLabel"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:text="עוצמה ייעודית עבור YouTube:"
-                                android:textColor="#FFFFFF"
-                                android:textSize="12sp"
-                                android:textStyle="bold" />
-
-                            <TextView
-                                android:id="@+id/tvPerAppTargetValue"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="140%"
-                                android:textColor="#00E676"
-                                android:textSize="12sp"
-                                android:textStyle="bold" />
-                        </LinearLayout>
-
-                        <SeekBar
-                            android:id="@+id/seekPerAppTargetVol"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:max="300"
-                            android:progress="140"
-                            android:progressTint="#00E676"
-                            android:thumbTint="#00E676" />
-
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-
-                <!-- כרטיס חדש: זיהוי סביבה רועשת (Ambient Noise Auto-Boost) -->
-                <com.google.android.material.card.MaterialCardView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="16dp"
-                    app:cardBackgroundColor="#161B26"
-                    app:cardCornerRadius="20dp"
-                    app:strokeColor="#00E5FF"
-                    app:strokeWidth="1dp">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:padding="18dp">
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal">
-
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:orientation="vertical">
-
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="הגברה אוטומטית בסביבה רועשת (Ambient Auto-Boost)"
-                                    android:textColor="#00E5FF"
-                                    android:textSize="14sp"
-                                    android:textStyle="bold" />
-
-                                <TextView
-                                    android:id="@+id/tvAmbientNoiseInfo"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="2dp"
-                                    android:text="דוגם את עוצמת הרעש בסביבה ומגביר דינמית את השמע ברחוב או באוטובוס"
-                                    android:textColor="#A0AAB8"
-                                    android:textSize="11sp" />
-                            </LinearLayout>
-
-                            <androidx.appcompat.widget.SwitchCompat
-                                android:id="@+id/switchAmbientNoiseBoost"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:checked="false"
-                                app:thumbTint="#00E5FF" />
-                        </LinearLayout>
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="10dp"
-                            android:orientation="horizontal">
-
-                            <TextView
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:text="רגישות פיצוי רעש סביבתי (Max Auto-Gain)"
-                                android:textColor="#D0D8E8"
-                                android:textSize="12sp" />
-
-                            <TextView
-                                android:id="@+id/tvAmbientSensitivityVal"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="60%"
-                                android:textColor="#00E5FF"
-                                android:textSize="12sp"
-                                android:textStyle="bold" />
-                        </LinearLayout>
-
-                        <SeekBar
-                            android:id="@+id/seekAmbientSensitivity"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:max="100"
-                            android:progress="60"
-                            android:progressTint="#00E5FF"
-                            android:thumbTint="#00E5FF" />
-
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-
-                <!-- כרטיס: Sleep Timer with Smooth Fade-Out -->
-                <com.google.android.material.card.MaterialCardView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="16dp"
-                    app:cardBackgroundColor="#161B26"
-                    app:cardCornerRadius="20dp"
-                    app:strokeColor="#FFD740"
-                    app:strokeWidth="1dp">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:padding="18dp">
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal">
-
-                            <TextView
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:text="טיימר שינה חכם (Sleep Timer with Fade-Out)"
-                                android:textColor="#FFD740"
-                                android:textSize="15sp"
-                                android:textStyle="bold" />
-
-                            <TextView
-                                android:id="@+id/tvSleepTimerCountdown"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="כבוי"
-                                android:textColor="#00E676"
-                                android:textSize="13sp"
-                                android:textStyle="bold" />
-                        </LinearLayout>
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
-                            android:layout_marginBottom="10dp"
-                            android:text="מנמיך את עוצמת השמע בהדרגה חלקה (Fade-Out) בדקה האחרונה עד להשתקה מלאה"
-                            android:textColor="#A0AAB8"
-                            android:textSize="11sp" />
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal">
-
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/btnSleepOff"
-                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                                android:layout_width="0dp"
-                                android:layout_height="40dp"
-                                android:layout_marginEnd="4dp"
-                                android:layout_weight="1"
-                                android:text="כבוי"
-                                android:textColor="#FFD740"
-                                android:textSize="10sp"
-                                app:cornerRadius="10dp"
-                                app:strokeColor="#FFD740" />
-
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/btnSleep15"
-                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                                android:layout_width="0dp"
-                                android:layout_height="40dp"
-                                android:layout_marginEnd="4dp"
-                                android:layout_weight="1"
-                                android:text="15 דק'"
-                                android:textColor="#A0AAB8"
-                                android:textSize="10sp"
-                                app:cornerRadius="10dp"
-                                app:strokeColor="#3A465E" />
-
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/btnSleep30"
-                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                                android:layout_width="0dp"
-                                android:layout_height="40dp"
-                                android:layout_marginEnd="4dp"
-                                android:layout_weight="1"
-                                android:text="30 דק'"
-                                android:textColor="#A0AAB8"
-                                android:textSize="10sp"
-                                app:cornerRadius="10dp"
-                                app:strokeColor="#3A465E" />
-
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/btnSleep60"
-                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                                android:layout_width="0dp"
-                                android:layout_height="40dp"
-                                android:layout_weight="1"
-                                android:text="60 דק'"
-                                android:textColor="#A0AAB8"
-                                android:textSize="10sp"
-                                app:cornerRadius="10dp"
-                                app:strokeColor="#3A465E" />
-                        </LinearLayout>
-
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -1017,7 +694,7 @@
                 </com.google.android.material.card.MaterialCardView>
             </LinearLayout>
 
-            <!-- ================= קטגוריה 2: מנוע AI + דיבור חכם + כיול שמיעה אישי + Multi-Band Limiter ================= -->
+            <!-- ================= קטגוריה 2: מנוע AI + דיבור חכם + Multi-Band Limiter + HD Audio ================= -->
             <LinearLayout
                 android:id="@+id/sectionQuality"
                 android:layout_width="match_parent"
@@ -1025,7 +702,7 @@
                 android:orientation="vertical"
                 android:visibility="gone">
 
-                <!-- כרטיס AI ראשון: מנוע AI מוכן לשיפור שירים לאיכות גבוהה במיוחד -->
+                <!-- כרטיס AI ראשון -->
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -1186,7 +863,7 @@
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
-                <!-- כרטיס חדש: מצב דיבור חכם (Vocal Clarity) + כיול שמיעה אישי (Personalized Sound Calibration) -->
+                <!-- כרטיס: מצב דיבור חכם (Vocal Clarity) -->
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -1272,95 +949,6 @@
                             android:progress="70"
                             android:progressTint="#00E5FF"
                             android:thumbTint="#00E5FF" />
-
-                        <View
-                            android:layout_width="match_parent"
-                            android:layout_height="1dp"
-                            android:layout_marginVertical="14dp"
-                            android:background="#263042" />
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal">
-
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:orientation="vertical">
-
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="כיול שמע אישי לפי בדיקת שמיעה (Ear Calibration)"
-                                    android:textColor="#FFD740"
-                                    android:textSize="14sp"
-                                    android:textStyle="bold" />
-
-                                <TextView
-                                    android:id="@+id/tvCalibrationStatus"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="2dp"
-                                    android:text="משמיע תדרי בדיקה (250Hz / 1kHz / 4kHz) ובונה פרופיל מותאם לאוזן שלך"
-                                    android:textColor="#A0AAB8"
-                                    android:textSize="11sp" />
-                            </LinearLayout>
-
-                            <androidx.appcompat.widget.SwitchCompat
-                                android:id="@+id/switchPersonalCalibration"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:checked="true"
-                                app:thumbTint="#FFD740" />
-                        </LinearLayout>
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="10dp"
-                            android:orientation="horizontal">
-
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/btnToneTestLow"
-                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                                android:layout_width="0dp"
-                                android:layout_height="42dp"
-                                android:layout_marginEnd="4dp"
-                                android:layout_weight="1"
-                                android:text="בדיקת 250Hz"
-                                android:textColor="#FFD740"
-                                android:textSize="10sp"
-                                app:cornerRadius="10dp"
-                                app:strokeColor="#FFD740" />
-
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/btnToneTestMid"
-                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                                android:layout_width="0dp"
-                                android:layout_height="42dp"
-                                android:layout_marginEnd="4dp"
-                                android:layout_weight="1"
-                                android:text="בדיקת 1kHz"
-                                android:textColor="#00E5FF"
-                                android:textSize="10sp"
-                                app:cornerRadius="10dp"
-                                app:strokeColor="#00E5FF" />
-
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/btnToneTestHigh"
-                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                                android:layout_width="0dp"
-                                android:layout_height="42dp"
-                                android:layout_weight="1"
-                                android:text="בדיקת 4kHz"
-                                android:textColor="#00E676"
-                                android:textSize="10sp"
-                                app:cornerRadius="10dp"
-                                app:strokeColor="#00E676" />
-                        </LinearLayout>
 
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
@@ -1523,7 +1111,7 @@
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
-                <!-- כרטיס 2: מנוע HD DSP המקורי -->
+                <!-- כרטיס: מנוע HD DSP המקורי -->
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -1703,7 +1291,7 @@
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
-                <!-- כרטיס 3: שליטה ידנית במאסטרינג שירים (Ultra Hi-Fi 32-Bit) -->
+                <!-- כרטיס: שליטה ידנית במאסטרינג שירים (Ultra Hi-Fi 32-Bit) -->
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -1866,7 +1454,310 @@
 
             </LinearLayout>
 
-            <!-- ================= קטגוריה 3: אפקטים אקוסטיים (3D & Bass) ================= -->
+            <!-- ================= קטגוריה 3 (חדש!): איזון ערוצים L/R, פיצוי ווליום נמוך, מניעת עייפות וכיול שמיעה ================= -->
+            <LinearLayout
+                android:id="@+id/sectionHearing"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <!-- 1. איזון ערוצים שמאל / ימין (L/R Stereo Channel Balance) -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    app:cardBackgroundColor="#161B26"
+                    app:cardCornerRadius="24dp"
+                    app:strokeColor="#00E5FF"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="20dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="איזון ערוצים שמאל / ימין (L/R Stereo Balance)"
+                                    android:textColor="#00E5FF"
+                                    android:textSize="15sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="מאזן את חלוקת העוצמה בין אוזן שמאל לאוזן ימין (אידיאלי לפערי שמיעה או אוזניה חלשה)"
+                                    android:textColor="#A0AAB8"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnResetLRBalance"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="38dp"
+                                android:text="מרכז 50/50"
+                                android:textColor="#00E676"
+                                android:textSize="10sp"
+                                app:cornerRadius="10dp"
+                                app:strokeColor="#00E676" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/tvLRBalanceValue"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:gravity="center"
+                            android:text="מאוזן במרכז (L: 100% | R: 100%)"
+                            android:textColor="#FFFFFF"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
+
+                        <SeekBar
+                            android:id="@+id/seekLRBalance"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:max="200"
+                            android:progress="100"
+                            android:progressTint="#00E5FF"
+                            android:thumbTint="#00E5FF" />
+
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- 2. פיצוי תדרים בווליום נמוך (Loudness Contour) + מניעת עייפות שמיעה (Anti-Fatigue) -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    app:cardBackgroundColor="#161B26"
+                    app:cardCornerRadius="24dp"
+                    app:strokeColor="#00E676"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="20dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="10dp"
+                            android:text="פסיכו-אקוסטיקה והגנה מעייפות שמיעה"
+                            android:textColor="#00E676"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <!-- Loudness Contour -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="6dp">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="פיצוי תדרים בווליום נמוך (Fletcher-Munson Contour)"
+                                    android:textColor="#FFFFFF"
+                                    android:textSize="13sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="שומר על סאב-באס ופירוט גבוה גם כאשר מאזינים בעוצמה נמוכה ושקטה בלילה"
+                                    android:textColor="#A0AAB8"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+
+                            <androidx.appcompat.widget.SwitchCompat
+                                android:id="@+id/switchLoudnessContour"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:checked="true"
+                                app:thumbTint="#00E676" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginVertical="10dp"
+                            android:background="#263042" />
+
+                        <!-- Anti-Fatigue Mode -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="6dp">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="מניעת עייפות שמיעה (Anti-Fatigue / Warm Dark Mode)"
+                                    android:textColor="#FFD740"
+                                    android:textSize="13sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="מרכך תדרי שריקה וצרימה (6kHz - 10kHz) להאזנה ממושכת לאורך שעות ללא כאב ראש"
+                                    android:textColor="#A0AAB8"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+
+                            <androidx.appcompat.widget.SwitchCompat
+                                android:id="@+id/switchAntiFatigue"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:checked="false"
+                                app:thumbTint="#FFD740" />
+                        </LinearLayout>
+
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- 3. כיול שמע אישי לפי בדיקת שמיעה (Ear Calibration) -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="20dp"
+                    app:cardBackgroundColor="#161B26"
+                    app:cardCornerRadius="24dp"
+                    app:strokeColor="#FFD740"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="20dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="כיול שמע אישי לפי בדיקת שמיעה (Ear Calibration)"
+                                    android:textColor="#FFD740"
+                                    android:textSize="15sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:id="@+id/tvCalibrationStatus"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="משמיע תדרי בדיקה (250Hz / 1kHz / 4kHz) ובונה פרופיל מותאם לאוזן שלך"
+                                    android:textColor="#A0AAB8"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+
+                            <androidx.appcompat.widget.SwitchCompat
+                                android:id="@+id/switchPersonalCalibration"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:checked="true"
+                                app:thumbTint="#FFD740" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:orientation="horizontal">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnToneTestLow"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="0dp"
+                                android:layout_height="44dp"
+                                android:layout_marginEnd="4dp"
+                                android:layout_weight="1"
+                                android:text="בדיקת 250Hz"
+                                android:textColor="#FFD740"
+                                android:textSize="10sp"
+                                app:cornerRadius="10dp"
+                                app:strokeColor="#FFD740" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnToneTestMid"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="0dp"
+                                android:layout_height="44dp"
+                                android:layout_marginEnd="4dp"
+                                android:layout_weight="1"
+                                android:text="בדיקת 1kHz"
+                                android:textColor="#00E5FF"
+                                android:textSize="10sp"
+                                app:cornerRadius="10dp"
+                                app:strokeColor="#00E5FF" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnToneTestHigh"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="0dp"
+                                android:layout_height="44dp"
+                                android:layout_weight="1"
+                                android:text="בדיקת 4kHz"
+                                android:textColor="#00E676"
+                                android:textSize="10sp"
+                                app:cornerRadius="10dp"
+                                app:strokeColor="#00E676" />
+                        </LinearLayout>
+
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+            </LinearLayout>
+
+            <!-- ================= קטגוריה 4: אפקטים אקוסטיים (3D & Bass) ================= -->
             <LinearLayout
                 android:id="@+id/sectionEffects"
                 android:layout_width="match_parent"
@@ -2000,7 +1891,7 @@
                 </com.google.android.material.card.MaterialCardView>
             </LinearLayout>
 
-            <!-- ================= קטגוריה 4: אקולייזר פרמטרי מורחב 10 ערוצים ופרופילים ================= -->
+            <!-- ================= קטגוריה 5: אקולייזר פרמטרי מורחב 10 ערוצים ופרופילים ================= -->
             <LinearLayout
                 android:id="@+id/sectionEq"
                 android:layout_width="match_parent"
@@ -2090,35 +1981,21 @@
                         android:orientation="vertical"
                         android:padding="20dp">
 
-                        <LinearLayout
-                            android:layout_width="match_parent"
+                        <TextView
+                            android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal">
+                            android:text="אקולייזר פרמטרי 10 ערוצים (10-Band Parametric EQ)"
+                            android:textColor="#FFFFFF"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
 
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:orientation="vertical">
-
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="אקולייזר פרמטרי 10 ערוצים (10-Band Parametric EQ)"
-                                    android:textColor="#FFFFFF"
-                                    android:textSize="15sp"
-                                    android:textStyle="bold" />
-
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="2dp"
-                                    android:text="שליטה מדויקת ב-10 תדרי שמע (31Hz - 16kHz) ורוחב פילטר פרמטרי (Q-Factor)"
-                                    android:textColor="#A0AAB8"
-                                    android:textSize="11sp" />
-                            </LinearLayout>
-                        </LinearLayout>
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="שליטה מדויקת ב-10 תדרי שמע (31Hz - 16kHz) ורוחב פילטר פרמטרי (Q-Factor)"
+                            android:textColor="#A0AAB8"
+                            android:textSize="11sp" />
 
                         <LinearLayout
                             android:layout_width="match_parent"
@@ -2169,6 +2046,789 @@
                             android:orientation="vertical" />
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
+            </LinearLayout>
+
+            <!-- ================= קטגוריה 6 (חדש!): אוטומציה, Per-App, רעש סביבתי, טיימר שינה והגנת ניתוק אוזניות ================= -->
+            <LinearLayout
+                android:id="@+id/sectionAutomation"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <!-- 1. Per-App Volume Control -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    app:cardBackgroundColor="#161B26"
+                    app:cardCornerRadius="20dp"
+                    app:strokeColor="#00E676"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="18dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="פרופיל עוצמה עצמאי לכל אפליקציה (Per-App Volume)"
+                                    android:textColor="#00E676"
+                                    android:textSize="15sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:id="@+id/tvPerAppStatusInfo"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="מזהה אוטומטית פתיחת YouTube, Spotify, TikTok או משחקים ומתאים ווליום"
+                                    android:textColor="#A0AAB8"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+
+                            <androidx.appcompat.widget.SwitchCompat
+                                android:id="@+id/switchPerAppVolume"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:checked="true"
+                                app:thumbTint="#00E676" />
+                        </LinearLayout>
+
+                        <HorizontalScrollView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:scrollbars="none">
+
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal">
+
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/btnAppSlotYoutube"
+                                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="40dp"
+                                    android:layout_marginEnd="6dp"
+                                    android:text="YouTube"
+                                    android:textColor="#00E676"
+                                    android:textSize="10sp"
+                                    app:cornerRadius="10dp"
+                                    app:strokeColor="#00E676" />
+
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/btnAppSlotSpotify"
+                                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="40dp"
+                                    android:layout_marginEnd="6dp"
+                                    android:text="Spotify / Music"
+                                    android:textColor="#A0AAB8"
+                                    android:textSize="10sp"
+                                    app:cornerRadius="10dp"
+                                    app:strokeColor="#3A465E" />
+
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/btnAppSlotSocial"
+                                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="40dp"
+                                    android:layout_marginEnd="6dp"
+                                    android:text="TikTok / Reels"
+                                    android:textColor="#A0AAB8"
+                                    android:textSize="10sp"
+                                    app:cornerRadius="10dp"
+                                    app:strokeColor="#3A465E" />
+
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/btnAppSlotGaming"
+                                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="40dp"
+                                    android:layout_marginEnd="6dp"
+                                    android:text="משחקים (Games)"
+                                    android:textColor="#A0AAB8"
+                                    android:textSize="10sp"
+                                    app:cornerRadius="10dp"
+                                    app:strokeColor="#3A465E" />
+
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/btnAppSlotVoice"
+                                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="40dp"
+                                    android:text="WhatsApp / פודקאסט"
+                                    android:textColor="#A0AAB8"
+                                    android:textSize="10sp"
+                                    app:cornerRadius="10dp"
+                                    app:strokeColor="#3A465E" />
+                            </LinearLayout>
+                        </HorizontalScrollView>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:id="@+id/tvPerAppTargetLabel"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="עוצמה ייעודית עבור YouTube:"
+                                android:textColor="#FFFFFF"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvPerAppTargetValue"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="140%"
+                                android:textColor="#00E676"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <SeekBar
+                            android:id="@+id/seekPerAppTargetVol"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:max="300"
+                            android:progress="140"
+                            android:progressTint="#00E676"
+                            android:thumbTint="#00E676" />
+
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- 2. Ambient Noise Auto-Boost -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    app:cardBackgroundColor="#161B26"
+                    app:cardCornerRadius="20dp"
+                    app:strokeColor="#00E5FF"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="18dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="הגברה אוטומטית בסביבה רועשת (Ambient Auto-Boost)"
+                                    android:textColor="#00E5FF"
+                                    android:textSize="14sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:id="@+id/tvAmbientNoiseInfo"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="דוגם את עוצמת הרעש בסביבה ומגביר דינמית את השמע ברחוב או באוטובוס"
+                                    android:textColor="#A0AAB8"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+
+                            <androidx.appcompat.widget.SwitchCompat
+                                android:id="@+id/switchAmbientNoiseBoost"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:checked="false"
+                                app:thumbTint="#00E5FF" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="רגישות פיצוי רעש סביבתי (Max Auto-Gain)"
+                                android:textColor="#D0D8E8"
+                                android:textSize="12sp" />
+
+                            <TextView
+                                android:id="@+id/tvAmbientSensitivityVal"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="60%"
+                                android:textColor="#00E5FF"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <SeekBar
+                            android:id="@+id/seekAmbientSensitivity"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:max="100"
+                            android:progress="60"
+                            android:progressTint="#00E5FF"
+                            android:thumbTint="#00E5FF" />
+
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- 3. שחזור ווליום בניתוק אוזניות + הגנת התרחקות בלוטות' -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    app:cardBackgroundColor="#161B26"
+                    app:cardCornerRadius="20dp"
+                    app:strokeColor="#BB86FC"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="18dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="10dp"
+                            android:text="הגנות חיבור, ניתוק אוזניות וקליטת Bluetooth"
+                            android:textColor="#BB86FC"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="4dp">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="שחזור אוטומטי של ווליום רמקול בניתוק אוזניות"
+                                    android:textColor="#FFFFFF"
+                                    android:textSize="13sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="שומר בנפרד ווליום לאוזניות וווליום לרמקול כדי למנוע זליגת סאונד חזק בניתוק"
+                                    android:textColor="#A0AAB8"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+
+                            <androidx.appcompat.widget.SwitchCompat
+                                android:id="@+id/switchAutoRestoreUnplug"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:checked="true"
+                                app:thumbTint="#BB86FC" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginVertical="10dp"
+                            android:background="#263042" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="4dp">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="הנמכה חכמה בניתוק/התרחקות בלוטות' (BT Range Guard)"
+                                    android:textColor="#00E5FF"
+                                    android:textSize="13sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="מונע קפיצת רעש פתאומית ברמקול כאשר מכשיר ה-Bluetooth מתנתק מטווח קליטה"
+                                    android:textColor="#A0AAB8"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+
+                            <androidx.appcompat.widget.SwitchCompat
+                                android:id="@+id/switchBtRangeGuard"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:checked="true"
+                                app:thumbTint="#00E5FF" />
+                        </LinearLayout>
+
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- 4. Sleep Timer with Smooth Fade-Out -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="20dp"
+                    app:cardBackgroundColor="#161B26"
+                    app:cardCornerRadius="20dp"
+                    app:strokeColor="#FFD740"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="18dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="טיימר שינה חכם (Sleep Timer with Fade-Out)"
+                                android:textColor="#FFD740"
+                                android:textSize="15sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvSleepTimerCountdown"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="כבוי"
+                                android:textColor="#00E676"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:layout_marginBottom="10dp"
+                            android:text="מנמיך את עוצמת השמע בהדרגה חלקה (Fade-Out) בדקה האחרונה עד להשתקה מלאה"
+                            android:textColor="#A0AAB8"
+                            android:textSize="11sp" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnSleepOff"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="0dp"
+                                android:layout_height="40dp"
+                                android:layout_marginEnd="4dp"
+                                android:layout_weight="1"
+                                android:text="כבוי"
+                                android:textColor="#FFD740"
+                                android:textSize="10sp"
+                                app:cornerRadius="10dp"
+                                app:strokeColor="#FFD740" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnSleep15"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="0dp"
+                                android:layout_height="40dp"
+                                android:layout_marginEnd="4dp"
+                                android:layout_weight="1"
+                                android:text="15 דק'"
+                                android:textColor="#A0AAB8"
+                                android:textSize="10sp"
+                                app:cornerRadius="10dp"
+                                app:strokeColor="#3A465E" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnSleep30"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="0dp"
+                                android:layout_height="40dp"
+                                android:layout_marginEnd="4dp"
+                                android:layout_weight="1"
+                                android:text="30 דק'"
+                                android:textColor="#A0AAB8"
+                                android:textSize="10sp"
+                                app:cornerRadius="10dp"
+                                app:strokeColor="#3A465E" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnSleep60"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="0dp"
+                                android:layout_height="40dp"
+                                android:layout_weight="1"
+                                android:text="60 דק'"
+                                android:textColor="#A0AAB8"
+                                android:textSize="10sp"
+                                app:cornerRadius="10dp"
+                                app:strokeColor="#3A465E" />
+                        </LinearLayout>
+
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+            </LinearLayout>
+
+            <!-- ================= קטגוריה 7 (חדש!): מערכת, סוללה, ערכת נושא AMOLED, מיני-EQ צף וגיבוי JSON ================= -->
+            <LinearLayout
+                android:id="@+id/sectionSystem"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <!-- 1. חיסכון בסוללה + ערכת נושא AMOLED Black + צבעי הדגש -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    app:cardBackgroundColor="#161B26"
+                    app:cardCornerRadius="24dp"
+                    app:strokeColor="#00E676"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="20dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="10dp"
+                            android:text="ניהול סוללה, תצוגת AMOLED וצבעי מערכת"
+                            android:textColor="#00E676"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="4dp">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="חיסכון סוללה חכם אוטומטי (Auto Battery Saver DSP)"
+                                    android:textColor="#FFFFFF"
+                                    android:textSize="13sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:id="@+id/tvBatterySaverStatus"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="מכבה אוטומטית עיבודים כבדים כשהסוללה מתחת ל-15% למניעת התחממות"
+                                    android:textColor="#A0AAB8"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+
+                            <androidx.appcompat.widget.SwitchCompat
+                                android:id="@+id/switchBatterySaverDsp"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:checked="true"
+                                app:thumbTint="#00E676" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginVertical="10dp"
+                            android:background="#263042" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingVertical="4dp">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="מצב שחור מוחלט למסכי OLED (Pure AMOLED Black)"
+                                    android:textColor="#00E5FF"
+                                    android:textSize="13sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="הופך את רקע האפליקציה ל-#000000 אמיתי לחיסכון מרבי בסוללת המסך"
+                                    android:textColor="#A0AAB8"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+
+                            <androidx.appcompat.widget.SwitchCompat
+                                android:id="@+id/switchAmoledBlack"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:checked="false"
+                                app:thumbTint="#00E5FF" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:layout_marginBottom="8dp"
+                            android:text="בחר ערכת צבעי הדגש לאפליקציה ולבועית ה-HD:"
+                            android:textColor="#D0D8E8"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnThemeNeonGreen"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="0dp"
+                                android:layout_height="40dp"
+                                android:layout_marginEnd="4dp"
+                                android:layout_weight="1"
+                                android:text="ניאון ירוק"
+                                android:textColor="#00E676"
+                                android:textSize="10sp"
+                                app:cornerRadius="10dp"
+                                app:strokeColor="#00E676" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnThemeCyberCyan"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="0dp"
+                                android:layout_height="40dp"
+                                android:layout_marginEnd="4dp"
+                                android:layout_weight="1"
+                                android:text="סייבר ציאן"
+                                android:textColor="#00E5FF"
+                                android:textSize="10sp"
+                                app:cornerRadius="10dp"
+                                app:strokeColor="#00E5FF" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnThemeStudioGold"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="0dp"
+                                android:layout_height="40dp"
+                                android:layout_marginEnd="4dp"
+                                android:layout_weight="1"
+                                android:text="אולפן זהב"
+                                android:textColor="#FFD740"
+                                android:textSize="10sp"
+                                app:cornerRadius="10dp"
+                                app:strokeColor="#FFD740" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnThemeUltraPurple"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="0dp"
+                                android:layout_height="40dp"
+                                android:layout_weight="1"
+                                android:text="אולטרה סגול"
+                                android:textColor="#BB86FC"
+                                android:textSize="10sp"
+                                app:cornerRadius="10dp"
+                                app:strokeColor="#BB86FC" />
+                        </LinearLayout>
+
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- 2. חלון מיני-אקולייזר צף מהיר (Bubble Mini-EQ Overlay) -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    app:cardBackgroundColor="#161B26"
+                    app:cardCornerRadius="24dp"
+                    app:strokeColor="#BB86FC"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="20dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="חלון מיני-אקולייזר צף מעל אפליקציות (Bubble Mini-EQ)"
+                            android:textColor="#BB86FC"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="12dp"
+                            android:text="פותח כרטיסיית שליטה צפה ומהירה מעל כל מסך (ניתן לפתוח גם בלחיצה כפולה על בועית ה-HD הצפה)."
+                            android:textColor="#A0AAB8"
+                            android:textSize="11sp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnOpenFloatingMiniEq"
+                            android:layout_width="match_parent"
+                            android:layout_height="46dp"
+                            android:backgroundTint="#BB86FC"
+                            android:text="פתח חלון מיני-אקולייזר צף כעת"
+                            android:textColor="#0B0E14"
+                            android:textStyle="bold"
+                            app:cornerRadius="12dp" />
+
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- 3. גיבוי ושחזור הגדרות JSON (Export / Import Configuration) -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="24dp"
+                    app:cardBackgroundColor="#161B26"
+                    app:cardCornerRadius="24dp"
+                    app:strokeColor="#FFD740"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="20dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="גיבוי ושחזור הגדרות מלא (JSON Export / Import)"
+                            android:textColor="#FFD740"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="14dp"
+                            android:text="שומר ומשחזר את כל 10 ערוצי ה-EQ, פרופילי האפליקציות, הלימיטר, איזון ה-L/R וכיול השמיעה בפורמט JSON."
+                            android:textColor="#A0AAB8"
+                            android:textSize="11sp" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnExportJsonConfig"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="0dp"
+                                android:layout_height="46dp"
+                                android:layout_marginEnd="6dp"
+                                android:layout_weight="1"
+                                android:text="ייצא גיבוי JSON"
+                                android:textColor="#00E676"
+                                android:textSize="11sp"
+                                app:cornerRadius="12dp"
+                                app:strokeColor="#00E676" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnImportJsonConfig"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="0dp"
+                                android:layout_height="46dp"
+                                android:layout_weight="1"
+                                android:text="שחזר מגיבוי JSON"
+                                android:textColor="#FFD740"
+                                android:textSize="11sp"
+                                app:cornerRadius="12dp"
+                                app:strokeColor="#FFD740" />
+                        </LinearLayout>
+
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
             </LinearLayout>
 
         </FrameLayout>
