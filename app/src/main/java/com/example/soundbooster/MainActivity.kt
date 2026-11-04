@@ -1,10 +1,6 @@
 package com.example.soundbooster
 
 import android.accessibilityservice.AccessibilityService
-import android.animation.Animator
-import android.animation.AnimatorListenerAdapter
-import android.animation.ValueAnimator
-import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
@@ -28,12 +24,9 @@ import android.provider.Settings
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.KeyEvent
-import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
-import android.view.animation.DecelerateInterpolator
-import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.SeekBar
@@ -46,7 +39,7 @@ import com.google.android.material.card.MaterialCardView
 import kotlin.math.roundToInt
 
 // =========================================================================
-// 1. מנוע סאונד יציב (ללא קפיצות ווליום עצמאיות וללא הופעת מחוון מערכת!)
+// 1. מנוע סאונד והגברה דרך מחוון המערכת המקורי של המכשיר (Native SystemUI)
 // =========================================================================
 object AudioEngine {
     var loudnessEnhancer: LoudnessEnhancer? = null
@@ -58,7 +51,6 @@ object AudioEngine {
     var currentTotalVolume: Int = 100
     var savedMediaBoostVolume: Int = 100
     var isBoosterActive: Boolean = true
-    var sliderOnlyNoBoostMode: Boolean = false
     var allow300PercentBoost: Boolean = false
 
     // 0 = מדיה, 1 = עוצמת צלצול, 2 = התראות, 3 = שעון מעורר, 4 = שיחת טלפון
@@ -82,39 +74,15 @@ object AudioEngine {
     var songSeparationLevel: Int = 65
     var songPunchLevel: Int = 60
 
-    var sliderStyleIndex: Int = 1
-
     @Volatile var isInternalVolumeChange: Boolean = false
-    @Volatile var suppressSystemUILoopUntil: Long = 0L
     var bootCooldownUntil: Long = 0L
     private var playbackCallbackRegistered = false
     private var isInitializedOnce = false
 
-    val styleNames = listOf(
-        "0. מחוון המערכת המקורי של המכשיר (Native SystemUI)",
-        "1. עיצוב הזכוכית היוקרתי (Glassmorphism)",
-        "2. עיצוב פשוט ונקי (Simple Minimal)",
-        "3. עיצוב אנדרואיד ישן קלאסי (Retro Android Holo)",
-        "4. סייבר ניאון זוהר (Cyberpunk Neon)",
-        "5. חוגת אולפן אנלוגית (Studio Rotary Knob)",
-        "6. גלי קול דינמיים (Live Sound Wave)",
-        "7. קפסולת iOS מודרנית (Cupertino Pill)",
-        "8. רטרו ארקייד 8-Bit (Pixel Blocks)",
-        "9. תאורת קצה מסך (Edge Glow Bar)",
-        "10. מטריצת נוריות אולפן (LED Matrix)",
-        "11. קפסולה לבנה דקה + כפתור Play (Slim Red Accent Pill)",
-        "12. אולפן זהב כהה אנכי (Golden Thin Track & Knob)",
-        "13. בר עליון צמוד קצה עם תו מוזיקה (Top Status Bar Strip)",
-        "14. קפסולת Windows / Emoji מדורגת (Segmented Cap Pill)",
-        "15. סייבר-טק HUD טלמטריה (Cyber-Tech Telemetry HUD)",
-        "16. זכוכית חלבית + פס ניאון וכפתורים (Frosted Neon Tube Card)",
-        "17. זכוכית חלבית + קפסולת קשת בצבעים משתנים (Animated Rainbow Pill)"
-    )
-
     fun getEffectiveMaxVolume(): Int {
         if (activeStreamType != 0) return 100
         return when {
-            sliderOnlyNoBoostMode || !isBoosterActive -> 100
+            !isBoosterActive -> 100
             allow300PercentBoost -> 300
             else -> 200
         }
@@ -137,16 +105,6 @@ object AudioEngine {
             3 -> "שעון מעורר"
             4 -> "שיחת טלפון"
             else -> if (isBluetoothConnected) "מדיה (Bluetooth)" else "מדיה ומוזיקה"
-        }
-    }
-
-    fun getActiveStreamShortTitle(): String {
-        return when (activeStreamType) {
-            1 -> "RING VOL"
-            2 -> "NOTIFY"
-            3 -> "ALARM"
-            4 -> if (isBluetoothConnected) "BT CALL" else "CALL VOL"
-            else -> if (isBluetoothConnected) "BT AUDIO" else "VOLUME"
         }
     }
 
@@ -222,7 +180,6 @@ object AudioEngine {
     fun init(context: Context? = null) {
         context?.let {
             val prefs = it.getSharedPreferences("sound_booster_hd", Context.MODE_PRIVATE)
-            sliderOnlyNoBoostMode = prefs.getBoolean("slider_only_mode", sliderOnlyNoBoostMode)
             allow300PercentBoost = prefs.getBoolean("allow_300_boost", allow300PercentBoost)
 
             aiSongEngineEnabled = prefs.getBoolean("ai_song_en", aiSongEngineEnabled)
@@ -249,8 +206,6 @@ object AudioEngine {
                 isInitializedOnce = true
             }
 
-            sliderStyleIndex = prefs.getInt("slider_style", sliderStyleIndex).coerceIn(0, styleNames.lastIndex)
-            SliderThemeManager.loadAllStyleConfigs(it)
             updateBluetoothStatusOnly(it)
             registerAssistantSafeRecovery(it.applicationContext)
         }
@@ -260,7 +215,6 @@ object AudioEngine {
 
     fun saveEngineModes(context: Context) {
         context.getSharedPreferences("sound_booster_hd", Context.MODE_PRIVATE).edit()
-            .putBoolean("slider_only_mode", sliderOnlyNoBoostMode)
             .putBoolean("allow_300_boost", allow300PercentBoost)
             .putBoolean("ai_song_en", aiSongEngineEnabled)
             .putInt("ai_preset_mode", aiPresetMode)
@@ -273,7 +227,7 @@ object AudioEngine {
     }
 
     private fun ensureAudioEffectsCreated() {
-        val effectsActive = isBoosterActive && !sliderOnlyNoBoostMode
+        val effectsActive = isBoosterActive
         if (loudnessEnhancer == null) {
             runCatching { loudnessEnhancer = LoudnessEnhancer(0).apply { enabled = effectsActive } }
         }
@@ -301,7 +255,7 @@ object AudioEngine {
                 override fun onPlaybackConfigChanged(configs: MutableList<AudioPlaybackConfiguration>?) {
                     super.onPlaybackConfigChanged(configs)
                     updateBluetoothStatusOnly(appContext)
-                    if (!isBoosterActive || sliderOnlyNoBoostMode) {
+                    if (!isBoosterActive) {
                         runCatching { loudnessEnhancer?.setTargetGain(0) }
                         return
                     }
@@ -317,7 +271,7 @@ object AudioEngine {
     }
 
     private fun reapplyCurrentGainSafely() {
-        if (!isBoosterActive || sliderOnlyNoBoostMode) {
+        if (!isBoosterActive) {
             runCatching { loudnessEnhancer?.setTargetGain(0) }
             return
         }
@@ -341,14 +295,8 @@ object AudioEngine {
         }
     }
 
-    fun saveSelectedStyleIndex(context: Context) {
-        suppressSystemUILoopUntil = SystemClock.elapsedRealtime() + 1000L
-        context.getSharedPreferences("sound_booster_hd", Context.MODE_PRIVATE)
-            .edit().putInt("slider_style", sliderStyleIndex).apply()
-    }
-
     fun updateSoundQualityDSP() {
-        if (!isBoosterActive || sliderOnlyNoBoostMode) return
+        if (!isBoosterActive) return
         val eq = equalizer ?: return
 
         runCatching {
@@ -444,15 +392,14 @@ object AudioEngine {
 
     fun setEnabled(enabled: Boolean) {
         isBoosterActive = enabled
-        val effectsShouldRun = enabled && !sliderOnlyNoBoostMode
         runCatching {
-            if (!effectsShouldRun) loudnessEnhancer?.setTargetGain(0)
-            loudnessEnhancer?.enabled = effectsShouldRun
+            if (!enabled) loudnessEnhancer?.setTargetGain(0)
+            loudnessEnhancer?.enabled = enabled
         }
-        runCatching { equalizer?.enabled = effectsShouldRun }
-        runCatching { bassBoost?.enabled = effectsShouldRun }
-        runCatching { virtualizer?.enabled = effectsShouldRun }
-        runCatching { presetReverb?.enabled = effectsShouldRun }
+        runCatching { equalizer?.enabled = enabled }
+        runCatching { bassBoost?.enabled = enabled }
+        runCatching { virtualizer?.enabled = enabled }
+        runCatching { presetReverb?.enabled = enabled }
     }
 
     fun applyVolume(context: Context, totalPercent: Int, showNativeSystemUI: Boolean = false) {
@@ -463,14 +410,10 @@ object AudioEngine {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
         val now = SystemClock.elapsedRealtime()
 
-        val allowNativeUI = (sliderStyleIndex == 0) &&
-                            showNativeSystemUI &&
-                            (now > bootCooldownUntil) &&
-                            (now > suppressSystemUILoopUntil)
+        val allowNativeUI = showNativeSystemUI && (now > bootCooldownUntil)
         val flags = if (allowNativeUI) AudioManager.FLAG_SHOW_UI else 0
 
         isInternalVolumeChange = true
-        suppressSystemUILoopUntil = now + 450L
         try {
             if (activeStreamType != 0) {
                 val targetStream = getAndroidStreamConstant(activeStreamType)
@@ -490,7 +433,7 @@ object AudioEngine {
             val maxSysVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
             val curSys = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
 
-            if (currentTotalVolume <= 100 || sliderOnlyNoBoostMode || !isBoosterActive) {
+            if (currentTotalVolume <= 100 || !isBoosterActive) {
                 val safePct = currentTotalVolume.coerceIn(0, 100)
                 val sysTarget = ((safePct / 100f) * maxSysVol).roundToInt()
                 if (curSys != sysTarget || allowNativeUI) {
@@ -525,13 +468,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnVol300: MaterialButton
     private lateinit var switchEnable: SwitchCompat
     private lateinit var btnEnableSystemSlider: MaterialButton
-    private lateinit var btnToggleInteractiveEdit: MaterialButton
     private val eqSliders = mutableListOf<SeekBar>()
-    private val styleButtons = mutableListOf<MaterialButton>()
-    private val colorSlotButtons = mutableListOf<MaterialButton>()
 
-    private var currentColorSlotIndex = 0
-    private lateinit var colorWheelView: TrueColorWheelView
     private var isUpdatingControlsProgrammatically = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -549,14 +487,12 @@ class MainActivity : AppCompatActivity() {
 
         setupCategoryTabs()
         setupModernUI()
-        setupSliderDesignCategory()
     }
 
     override fun onResume() {
         super.onResume()
         AudioEngine.updateBluetoothStatusOnly(this)
         updateServiceButtonState()
-        updateEditButtonState(VolumeOverlayService.instance?.isEditModeActive() == true)
         syncVolumeRangeUI()
     }
 
@@ -565,16 +501,14 @@ class MainActivity : AppCompatActivity() {
         val tabQuality = findViewById<MaterialButton>(R.id.tabBtnQuality)
         val tabEffects = findViewById<MaterialButton>(R.id.tabBtnEffects)
         val tabEq = findViewById<MaterialButton>(R.id.tabBtnEq)
-        val tabSliderDesign = findViewById<MaterialButton>(R.id.tabBtnSliderDesign)
 
         val secVolume = findViewById<View>(R.id.sectionVolume)
         val secQuality = findViewById<View>(R.id.sectionQuality)
         val secEffects = findViewById<View>(R.id.sectionEffects)
         val secEq = findViewById<View>(R.id.sectionEq)
-        val secSliderDesign = findViewById<View>(R.id.sectionSliderDesign)
 
-        val tabs = listOf(tabVolume, tabQuality, tabEffects, tabEq, tabSliderDesign)
-        val sections = listOf(secVolume, secQuality, secEffects, secEq, secSliderDesign)
+        val tabs = listOf(tabVolume, tabQuality, tabEffects, tabEq)
+        val sections = listOf(secVolume, secQuality, secEffects, secEq)
 
         fun selectTab(index: Int) {
             for (i in tabs.indices) {
@@ -594,28 +528,16 @@ class MainActivity : AppCompatActivity() {
         tabQuality.setOnClickListener { selectTab(1) }
         tabEffects.setOnClickListener { selectTab(2) }
         tabEq.setOnClickListener { selectTab(3) }
-        tabSliderDesign.setOnClickListener { selectTab(4) }
     }
 
     private fun updateServiceButtonState() {
         if (VolumeOverlayService.instance != null) {
             val maxTxt = AudioEngine.getEffectiveMaxVolume()
-            btnEnableSystemSlider.text = "שירות מחוון הווליום ($maxTxt%) פעיל ומחובר"
+            btnEnableSystemSlider.text = "הגברת מחוון המערכת ($maxTxt%) פעילה ומחוברת"
             btnEnableSystemSlider.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#00E676"))
         } else {
             btnEnableSystemSlider.text = "הפעל הרחבת מחוון מערכת בהגדרות"
             btnEnableSystemSlider.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#00E5FF"))
-        }
-    }
-
-    private fun updateEditButtonState(isEditing: Boolean) {
-        if (!::btnToggleInteractiveEdit.isInitialized) return
-        if (isEditing) {
-            btnToggleInteractiveEdit.text = "✓ סיים עריכת מיקום ושמור (או לחץ על '✓ סיים' במחוון)"
-            btnToggleInteractiveEdit.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#00E676"))
-        } else {
-            btnToggleInteractiveEdit.text = "פתח מחוון להתאמת מיקום וגודל במסך"
-            btnToggleInteractiveEdit.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#00E5FF"))
         }
     }
 
@@ -628,12 +550,11 @@ class MainActivity : AppCompatActivity() {
         val streamLabel = AudioEngine.getActiveStreamHebrewLabel()
         tvVolumeCardTitle.text = when {
             AudioEngine.activeStreamType != 0 -> "ערוץ פעיל: $streamLabel (0% - 100%)"
-            AudioEngine.sliderOnlyNoBoostMode -> "עוצמת שמע (0% - 100% | מצב מחוון בלבד)"
             AudioEngine.allow300PercentBoost -> "עוצמת $streamLabel (0% - 300%)"
             else -> "עוצמת $streamLabel (0% - 200%)"
         }
 
-        btnVol300.visibility = if (AudioEngine.allow300PercentBoost && !AudioEngine.sliderOnlyNoBoostMode && AudioEngine.activeStreamType == 0) {
+        btnVol300.visibility = if (AudioEngine.allow300PercentBoost && AudioEngine.activeStreamType == 0) {
             View.VISIBLE
         } else {
             View.GONE
@@ -663,7 +584,6 @@ class MainActivity : AppCompatActivity() {
         btnVol300 = findViewById(R.id.btnVol300)
 
         val switchAllow300 = findViewById<SwitchCompat>(R.id.switchAllow300Boost)
-        val switchSliderOnly = findViewById<SwitchCompat>(R.id.switchSliderOnlyMode)
 
         val switchAiEngine = findViewById<SwitchCompat>(R.id.switchAiSongEngine)
         val tvAiSubStatus = findViewById<TextView>(R.id.tvAiEngineSubStatus)
@@ -702,7 +622,6 @@ class MainActivity : AppCompatActivity() {
         tvVolumeCardTitle.setOnClickListener {
             AudioEngine.cycleNextStream(this)
             syncVolumeRangeUI()
-            VolumeOverlayService.instance?.refreshOverlayLive(updateLayout = false)
             Toast.makeText(this, "ערוץ נבחר: ${AudioEngine.getActiveStreamHebrewLabel()} (לחץ שוב להחלפה)", Toast.LENGTH_SHORT).show()
         }
 
@@ -715,14 +634,9 @@ class MainActivity : AppCompatActivity() {
             val btStatus = if (AudioEngine.isBluetoothConnected) " | BT מחובר" else ""
             when {
                 !AudioEngine.isBoosterActive -> {
-                    tvStatus.text = "מנוע סאונד ומחוון כבויים ●$btStatus"
+                    tvStatus.text = "מנוע סאונד כבוי ●$btStatus"
                     tvStatus.setTextColor(Color.parseColor("#FF5252"))
                     cardHeader.strokeColor = Color.parseColor("#263042")
-                }
-                AudioEngine.sliderOnlyNoBoostMode -> {
-                    tvStatus.text = "מצב עיצוב מחוון בלבד פעיל ● ללא הגברת סאונד$btStatus"
-                    tvStatus.setTextColor(Color.parseColor("#00E5FF"))
-                    cardHeader.strokeColor = Color.parseColor("#00E5FF")
                 }
                 AudioEngine.aiSongEngineEnabled -> {
                     tvStatus.text = "מנוע AI Neural Mastering פעיל ● שדרוג שירים חי$btStatus"
@@ -813,15 +727,6 @@ class MainActivity : AppCompatActivity() {
             refreshHeaderStatusText()
         }
 
-        switchSliderOnly.isChecked = AudioEngine.sliderOnlyNoBoostMode
-        switchSliderOnly.setOnCheckedChangeListener { _, isChecked ->
-            AudioEngine.sliderOnlyNoBoostMode = isChecked
-            AudioEngine.setEnabled(AudioEngine.isBoosterActive)
-            AudioEngine.saveEngineModes(this)
-            syncVolumeRangeUI()
-            refreshHeaderStatusText()
-        }
-
         seekTotalVolume.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 tvTotalVolume.text = "$progress%"
@@ -833,9 +738,7 @@ class MainActivity : AppCompatActivity() {
 
                 val curStreamName = AudioEngine.getActiveStreamHebrewLabel()
                 if (AudioEngine.activeStreamType != 0) {
-                    tvSubBoostInfo.text = "ערוץ: $curStreamName ($progress%) | לחץ על סמל המחוון להחלפת ערוץ"
-                } else if (AudioEngine.sliderOnlyNoBoostMode) {
-                    tvSubBoostInfo.text = "מערכת: $progress% | מצב עיצוב מחוון בלבד (ללא הגברה)"
+                    tvSubBoostInfo.text = "ערוץ: $curStreamName ($progress%)"
                 } else if (progress <= 100) {
                     tvSubBoostInfo.text = "ערוץ: $curStreamName | מנוע AI + HD: מוכנים"
                 } else {
@@ -870,27 +773,19 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.btnVol150).setOnClickListener {
             AudioEngine.activeStreamType = 0
             syncVolumeRangeUI()
-            if (AudioEngine.sliderOnlyNoBoostMode) {
-                Toast.makeText(this, "כבה את 'מצב עיצוב מחוון בלבד' כדי להגביר מעל 100%", Toast.LENGTH_SHORT).show()
-            } else {
-                seekTotalVolume.progress = 150
-                AudioEngine.applyVolume(this, 150, false)
-            }
+            seekTotalVolume.progress = 150
+            AudioEngine.applyVolume(this, 150, false)
         }
         findViewById<MaterialButton>(R.id.btnVol200).setOnClickListener {
             AudioEngine.activeStreamType = 0
             syncVolumeRangeUI()
-            if (AudioEngine.sliderOnlyNoBoostMode) {
-                Toast.makeText(this, "כבה את 'מצב עיצוב מחוון בלבד' כדי להגביר מעל 100%", Toast.LENGTH_SHORT).show()
-            } else {
-                seekTotalVolume.progress = 200
-                AudioEngine.applyVolume(this, 200, false)
-            }
+            seekTotalVolume.progress = 200
+            AudioEngine.applyVolume(this, 200, false)
         }
         btnVol300.setOnClickListener {
             AudioEngine.activeStreamType = 0
             syncVolumeRangeUI()
-            if (!AudioEngine.sliderOnlyNoBoostMode && AudioEngine.allow300PercentBoost) {
+            if (AudioEngine.allow300PercentBoost) {
                 seekTotalVolume.progress = 300
                 AudioEngine.applyVolume(this, 300, false)
             }
@@ -990,8 +885,8 @@ class MainActivity : AppCompatActivity() {
                     runCatching { AudioEngine.virtualizer?.setStrength(progress.toShort()) }
                 }
             }
-            override fun onStartTrackingTouch(s: SeekBar?) {}
-            override fun onStopTrackingTouch(s: SeekBar?) {}
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
 
         val reverbNames = listOf("ללא", "חדר קטן", "חדר בינוני", "חדר גדול", "אולם בינוני", "אולם גדול", "פלטה אקוסטית")
@@ -1002,7 +897,7 @@ class MainActivity : AppCompatActivity() {
                     runCatching { AudioEngine.presetReverb?.preset = progress.toShort() }
                 }
             }
-            override fun onStartTrackingTouch(s: SeekBar?) {}
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
             override fun onStopTrackingTouch(s: SeekBar?) {}
         })
 
@@ -1085,528 +980,26 @@ class MainActivity : AppCompatActivity() {
         refreshHeaderStatusText()
     }
 
-    private fun setupSliderDesignCategory() {
-        val stylesContainer = findViewById<LinearLayout>(R.id.stylesGridContainer)
-        val tvSelectedStyleName = findViewById<TextView>(R.id.tvSelectedStyleName)
-        val btnTestOverlay = findViewById<MaterialButton>(R.id.btnTestSliderOverlay)
-        val btnResetStyle = findViewById<MaterialButton>(R.id.btnResetCurrentStyle)
-
-        val colorSlotsContainer = findViewById<LinearLayout>(R.id.colorSlotsContainer)
-        val wheelHolder = findViewById<FrameLayout>(R.id.colorWheelHolder)
-        val tvHexColor = findViewById<TextView>(R.id.tvCurrentHexColor)
-        val seekHue = findViewById<SeekBar>(R.id.seekColorHue)
-        val seekSat = findViewById<SeekBar>(R.id.seekColorSat)
-        val seekVal = findViewById<SeekBar>(R.id.seekColorVal)
-
-        val layoutBorderControl = findViewById<View>(R.id.layoutBorderControl)
-        val seekBorderWidth = findViewById<SeekBar>(R.id.seekBorderWidth)
-        val tvBorderWidthVal = findViewById<TextView>(R.id.tvBorderWidthValue)
-
-        val layoutCornerControl = findViewById<View>(R.id.layoutCornerControl)
-        val seekRadius = findViewById<SeekBar>(R.id.seekCornerRadius)
-        val tvRadiusVal = findViewById<TextView>(R.id.tvCornerRadiusValue)
-
-        val layoutIconControl = findViewById<View>(R.id.layoutIconControl)
-        val seekIconSize = findViewById<SeekBar>(R.id.seekIconSize)
-        val tvIconSizeVal = findViewById<TextView>(R.id.tvIconSizeValue)
-
-        val seekTextSize = findViewById<SeekBar>(R.id.seekTextSize)
-        val tvTextSizeVal = findViewById<TextView>(R.id.tvTextSizeValue)
-
-        val layoutExtra1 = findViewById<View>(R.id.layoutExtraParam1)
-        val tvExtra1Label = findViewById<TextView>(R.id.tvExtraParam1Label)
-        val tvExtra1Val = findViewById<TextView>(R.id.tvExtraParam1Value)
-        val seekExtra1 = findViewById<SeekBar>(R.id.seekExtraParam1)
-
-        val layoutExtra2 = findViewById<View>(R.id.layoutExtraParam2)
-        val tvExtra2Label = findViewById<TextView>(R.id.tvExtraParam2Label)
-        val tvExtra2Val = findViewById<TextView>(R.id.tvExtraParam2Value)
-        val seekExtra2 = findViewById<SeekBar>(R.id.seekExtraParam2)
-
-        val seekAlpha = findViewById<SeekBar>(R.id.seekSliderAlpha)
-        val tvAlphaVal = findViewById<TextView>(R.id.tvSliderAlphaValue)
-
-        val switchBlur = findViewById<SwitchCompat>(R.id.switchBlurScreen)
-        val seekBlurStrength = findViewById<SeekBar>(R.id.seekBlurStrength)
-        val tvBlurStrengthVal = findViewById<TextView>(R.id.tvBlurStrengthValue)
-
-        val switchDim = findViewById<SwitchCompat>(R.id.switchDimScreen)
-        val seekDimStrength = findViewById<SeekBar>(R.id.seekDimStrength)
-        val tvDimStrengthVal = findViewById<TextView>(R.id.tvDimStrengthValue)
-
-        val switchDismissOutside = findViewById<SwitchCompat>(R.id.switchDismissOutside)
-
-        btnToggleInteractiveEdit = findViewById(R.id.btnToggleInteractiveEdit)
-        val seekWidth = findViewById<SeekBar>(R.id.seekSliderWidth)
-        val tvWidthVal = findViewById<TextView>(R.id.tvSliderWidthValue)
-        val seekHeight = findViewById<SeekBar>(R.id.seekSliderHeight)
-        val tvHeightVal = findViewById<TextView>(R.id.tvSliderHeightValue)
-        val seekPosX = findViewById<SeekBar>(R.id.seekPosX)
-        val tvPosXVal = findViewById<TextView>(R.id.tvPosXValue)
-        val seekPosY = findViewById<SeekBar>(R.id.seekPosY)
-        val tvPosYVal = findViewById<TextView>(R.id.tvPosYValue)
-
-        colorWheelView = TrueColorWheelView(this)
-        wheelHolder.addView(colorWheelView)
-
-        fun updateHexPreviewLabel(color: Int, slotName: String) {
-            val hex = String.format("#%06X", 0xFFFFFF and color)
-            tvHexColor.text = "$slotName: $hex"
-            val hsv = FloatArray(3)
-            Color.colorToHSV(color, hsv)
-            tvHexColor.setTextColor(if (hsv[2] < 0.28f) Color.WHITE else color)
-        }
-
-        fun loadSlotColorIntoWheel(slotIdx: Int) {
-            isUpdatingControlsProgrammatically = true
-            val cfg = SliderThemeManager.getCurrentConfig()
-            val caps = SliderThemeManager.getCurrentCapabilities()
-            val safeSlot = slotIdx.coerceIn(0, caps.colorSlotNames.lastIndex)
-            currentColorSlotIndex = safeSlot
-
-            for (i in colorSlotButtons.indices) {
-                val active = (i == safeSlot)
-                colorSlotButtons[i].strokeColor = ColorStateList.valueOf(
-                    if (active) Color.parseColor("#00E5FF") else Color.parseColor("#3A465E")
-                )
-                colorSlotButtons[i].setTextColor(
-                    if (active) Color.parseColor("#00E5FF") else Color.parseColor("#A0AAB8")
-                )
-            }
-
-            val color = cfg.colors[safeSlot]
-            colorWheelView.setColorFromExternal(color)
-            seekHue.progress = colorWheelView.getHueSliderValue()
-            seekSat.progress = colorWheelView.getSatSliderValue()
-            seekVal.progress = colorWheelView.getValSliderValue()
-
-            updateHexPreviewLabel(color, caps.colorSlotNames[safeSlot])
-            isUpdatingControlsProgrammatically = false
-        }
-
-        fun syncUIFromCurrentStyleConfig() {
-            isUpdatingControlsProgrammatically = true
-            val cfg = SliderThemeManager.getCurrentConfig()
-            val caps = SliderThemeManager.getCurrentCapabilities()
-
-            tvSelectedStyleName.text = "פעיל: ${AudioEngine.styleNames[AudioEngine.sliderStyleIndex]}"
-            for (i in styleButtons.indices) {
-                val active = (i == AudioEngine.sliderStyleIndex)
-                styleButtons[i].strokeColor = ColorStateList.valueOf(
-                    if (active) Color.parseColor("#00E676") else Color.parseColor("#2E3B4E")
-                )
-                styleButtons[i].setTextColor(
-                    if (active) Color.parseColor("#00E676") else Color.parseColor("#D0D8E8")
-                )
-            }
-
-            colorSlotButtons.clear()
-            colorSlotsContainer.removeAllViews()
-            for (slotIdx in caps.colorSlotNames.indices) {
-                val slotBtn = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
-                    text = caps.colorSlotNames[slotIdx]
-                    textSize = 11f
-                    cornerRadius = 22
-                    strokeWidth = 3
-                    layoutParams = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.WRAP_CONTENT,
-                        dpToPx(42f)
-                    ).apply { marginEnd = dpToPx(6f) }
-
-                    setOnClickListener {
-                        loadSlotColorIntoWheel(slotIdx)
-                    }
-                }
-                colorSlotButtons.add(slotBtn)
-                colorSlotsContainer.addView(slotBtn)
-            }
-
-            layoutBorderControl.visibility = if (caps.hasBorder) View.VISIBLE else View.GONE
-            seekBorderWidth.progress = cfg.borderWidthDp
-            tvBorderWidthVal.text = "${cfg.borderWidthDp} dp"
-
-            layoutCornerControl.visibility = if (caps.hasCornerRadius) View.VISIBLE else View.GONE
-            seekRadius.progress = cfg.cornerRadiusDp
-            tvRadiusVal.text = "${cfg.cornerRadiusDp} dp"
-
-            layoutIconControl.visibility = if (caps.hasIcon) View.VISIBLE else View.GONE
-            seekIconSize.progress = cfg.iconSizePercent
-            tvIconSizeVal.text = "${cfg.iconSizePercent}%"
-
-            seekTextSize.progress = cfg.textSizeSp
-            tvTextSizeVal.text = "${cfg.textSizeSp} sp"
-
-            if (caps.extraElementLabel1 != null) {
-                layoutExtra1.visibility = View.VISIBLE
-                tvExtra1Label.text = caps.extraElementLabel1
-                seekExtra1.progress = cfg.extraParam1
-                tvExtra1Val.text = "${cfg.extraParam1}%"
-            } else {
-                layoutExtra1.visibility = View.GONE
-            }
-
-            if (caps.extraElementLabel2 != null) {
-                layoutExtra2.visibility = View.VISIBLE
-                tvExtra2Label.text = caps.extraElementLabel2
-                seekExtra2.progress = cfg.extraParam2
-                tvExtra2Val.text = "${cfg.extraParam2}%"
-            } else {
-                layoutExtra2.visibility = View.GONE
-            }
-
-            seekAlpha.progress = cfg.sliderAlphaPercent
-            tvAlphaVal.text = "${cfg.sliderAlphaPercent}%"
-
-            switchBlur.isChecked = cfg.blurBackgroundEnabled
-            seekBlurStrength.progress = cfg.blurStrengthPercent
-            tvBlurStrengthVal.text = "${cfg.blurStrengthPercent}%"
-
-            switchDim.isChecked = cfg.dimBackgroundEnabled
-            seekDimStrength.progress = cfg.dimStrengthPercent
-            tvDimStrengthVal.text = "${cfg.dimStrengthPercent}%"
-
-            switchDismissOutside.isChecked = cfg.dismissOnOutsideTouch
-
-            seekWidth.progress = cfg.widthDp
-            tvWidthVal.text = "${cfg.widthDp} dp"
-            seekHeight.progress = cfg.heightDp
-            tvHeightVal.text = "${cfg.heightDp} dp"
-            seekPosX.progress = cfg.posXPercent
-            tvPosXVal.text = "${cfg.posXPercent}%"
-            seekPosY.progress = cfg.posYPercent
-            tvPosYVal.text = "${cfg.posYPercent}%"
-
-            loadSlotColorIntoWheel(0)
-            isUpdatingControlsProgrammatically = false
-        }
-
-        styleButtons.clear()
-        stylesContainer.removeAllViews()
-        for (i in AudioEngine.styleNames.indices) {
-            val btn = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
-                text = AudioEngine.styleNames[i]
-                textSize = 12f
-                gravity = Gravity.START or Gravity.CENTER_VERTICAL
-                cornerRadius = 28
-                strokeWidth = 3
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { bottomMargin = 8 }
-
-                setOnClickListener {
-                    AudioEngine.sliderStyleIndex = i
-                    AudioEngine.saveSelectedStyleIndex(this@MainActivity)
-                    syncUIFromCurrentStyleConfig()
-                    VolumeOverlayService.instance?.triggerPreviewOverlay(playEnterAnim = true)
-                }
-            }
-            styleButtons.add(btn)
-            stylesContainer.addView(btn)
-        }
-
-        btnResetStyle.setOnClickListener {
-            SliderThemeManager.resetStyleToDefault(this)
-            syncUIFromCurrentStyleConfig()
-            VolumeOverlayService.instance?.triggerPreviewOverlay(playEnterAnim = true)
-            Toast.makeText(this, "הגדרות המחוון הנוכחי אופסו לברירת המחדל", Toast.LENGTH_SHORT).show()
-        }
-
-        btnTestOverlay.setOnClickListener {
-            if (VolumeOverlayService.instance != null) {
-                VolumeOverlayService.instance?.triggerPreviewOverlay(playEnterAnim = true)
-            } else {
-                Toast.makeText(this, "הפעל תחילה את שירות המחוון בהגדרות הנגישות", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        fun saveAndApplySlotColor(newColor: Int) {
-            val cfg = SliderThemeManager.getCurrentConfig()
-            val caps = SliderThemeManager.getCurrentCapabilities()
-            val slot = currentColorSlotIndex.coerceIn(0, 5)
-            cfg.colors[slot] = newColor
-
-            val label = caps.colorSlotNames.getOrElse(slot) { "צבע" }
-            updateHexPreviewLabel(newColor, label)
-
-            SliderThemeManager.saveStyleConfig(this)
-            VolumeOverlayService.instance?.refreshOverlayLive(updateLayout = false)
-        }
-
-        colorWheelView.onWheelColorChanged = { pickedColor ->
-            isUpdatingControlsProgrammatically = true
-            seekHue.progress = colorWheelView.getHueSliderValue()
-            seekSat.progress = colorWheelView.getSatSliderValue()
-            seekVal.progress = colorWheelView.getValSliderValue()
-            isUpdatingControlsProgrammatically = false
-            saveAndApplySlotColor(pickedColor)
-        }
-
-        seekVal.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                if (!fromUser || isUpdatingControlsProgrammatically) return
-                val newColor = colorWheelView.updateWheelBrightness(p)
-                saveAndApplySlotColor(newColor)
-            }
-            override fun onStartTrackingTouch(s: SeekBar?) {}
-            override fun onStopTrackingTouch(s: SeekBar?) {}
-        })
-
-        seekSat.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                if (!fromUser || isUpdatingControlsProgrammatically) return
-                val newColor = colorWheelView.updateWheelSaturationScale(p)
-                saveAndApplySlotColor(newColor)
-            }
-            override fun onStartTrackingTouch(s: SeekBar?) {}
-            override fun onStopTrackingTouch(s: SeekBar?) {}
-        })
-
-        seekHue.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                if (!fromUser || isUpdatingControlsProgrammatically) return
-                val newColor = colorWheelView.updateWheelHueShift(p)
-                saveAndApplySlotColor(newColor)
-            }
-            override fun onStartTrackingTouch(s: SeekBar?) {}
-            override fun onStopTrackingTouch(s: SeekBar?) {}
-        })
-
-        seekBorderWidth.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                if (isUpdatingControlsProgrammatically) return
-                SliderThemeManager.getCurrentConfig().borderWidthDp = p
-                tvBorderWidthVal.text = "$p dp"
-                SliderThemeManager.saveStyleConfig(this@MainActivity)
-                VolumeOverlayService.instance?.refreshOverlayLive(updateLayout = false)
-            }
-            override fun onStartTrackingTouch(s: SeekBar?) {}
-            override fun onStopTrackingTouch(s: SeekBar?) {}
-        })
-
-        seekRadius.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                if (isUpdatingControlsProgrammatically) return
-                SliderThemeManager.getCurrentConfig().cornerRadiusDp = p
-                tvRadiusVal.text = "$p dp"
-                SliderThemeManager.saveStyleConfig(this@MainActivity)
-                VolumeOverlayService.instance?.refreshOverlayLive(updateLayout = false)
-            }
-            override fun onStartTrackingTouch(s: SeekBar?) {}
-            override fun onStopTrackingTouch(s: SeekBar?) {}
-        })
-
-        seekIconSize.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                if (isUpdatingControlsProgrammatically) return
-                val safeSize = p.coerceAtLeast(40)
-                SliderThemeManager.getCurrentConfig().iconSizePercent = safeSize
-                tvIconSizeVal.text = "$safeSize%"
-                SliderThemeManager.saveStyleConfig(this@MainActivity)
-                VolumeOverlayService.instance?.refreshOverlayLive(updateLayout = false)
-            }
-            override fun onStartTrackingTouch(s: SeekBar?) {}
-            override fun onStopTrackingTouch(s: SeekBar?) {}
-        })
-
-        seekTextSize.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                if (isUpdatingControlsProgrammatically) return
-                val safeSp = p.coerceAtLeast(9)
-                SliderThemeManager.getCurrentConfig().textSizeSp = safeSp
-                tvTextSizeVal.text = "$safeSp sp"
-                SliderThemeManager.saveStyleConfig(this@MainActivity)
-                VolumeOverlayService.instance?.refreshOverlayLive(updateLayout = false)
-            }
-            override fun onStartTrackingTouch(s: SeekBar?) {}
-            override fun onStopTrackingTouch(s: SeekBar?) {}
-        })
-
-        seekExtra1.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                if (isUpdatingControlsProgrammatically) return
-                SliderThemeManager.getCurrentConfig().extraParam1 = p
-                tvExtra1Val.text = "$p%"
-                SliderThemeManager.saveStyleConfig(this@MainActivity)
-                VolumeOverlayService.instance?.refreshOverlayLive(updateLayout = false)
-            }
-            override fun onStartTrackingTouch(s: SeekBar?) {}
-            override fun onStopTrackingTouch(s: SeekBar?) {}
-        })
-
-        seekExtra2.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                if (isUpdatingControlsProgrammatically) return
-                SliderThemeManager.getCurrentConfig().extraParam2 = p
-                tvExtra2Val.text = "$p%"
-                SliderThemeManager.saveStyleConfig(this@MainActivity)
-                VolumeOverlayService.instance?.refreshOverlayLive(updateLayout = false)
-            }
-            override fun onStartTrackingTouch(s: SeekBar?) {}
-            override fun onStopTrackingTouch(s: SeekBar?) {}
-        })
-
-        seekAlpha.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                if (isUpdatingControlsProgrammatically) return
-                val safeAlpha = p.coerceAtLeast(15)
-                SliderThemeManager.getCurrentConfig().sliderAlphaPercent = safeAlpha
-                tvAlphaVal.text = "$safeAlpha%"
-                SliderThemeManager.saveStyleConfig(this@MainActivity)
-                VolumeOverlayService.instance?.refreshOverlayLive(updateLayout = false)
-            }
-            override fun onStartTrackingTouch(s: SeekBar?) {}
-            override fun onStopTrackingTouch(s: SeekBar?) {}
-        })
-
-        switchBlur.setOnCheckedChangeListener { _, isChecked ->
-            if (isUpdatingControlsProgrammatically) return@setOnCheckedChangeListener
-            SliderThemeManager.getCurrentConfig().blurBackgroundEnabled = isChecked
-            SliderThemeManager.saveStyleConfig(this)
-            VolumeOverlayService.instance?.refreshOverlayLive(updateLayout = true)
-        }
-
-        seekBlurStrength.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                if (isUpdatingControlsProgrammatically) return
-                SliderThemeManager.getCurrentConfig().blurStrengthPercent = p
-                tvBlurStrengthVal.text = "$p%"
-                SliderThemeManager.saveStyleConfig(this@MainActivity)
-                VolumeOverlayService.instance?.refreshOverlayLive(updateLayout = true)
-            }
-            override fun onStartTrackingTouch(s: SeekBar?) {}
-            override fun onStopTrackingTouch(s: SeekBar?) {}
-        })
-
-        switchDim.setOnCheckedChangeListener { _, isChecked ->
-            if (isUpdatingControlsProgrammatically) return@setOnCheckedChangeListener
-            SliderThemeManager.getCurrentConfig().dimBackgroundEnabled = isChecked
-            SliderThemeManager.saveStyleConfig(this)
-            VolumeOverlayService.instance?.refreshOverlayLive(updateLayout = true)
-        }
-
-        seekDimStrength.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                if (isUpdatingControlsProgrammatically) return
-                SliderThemeManager.getCurrentConfig().dimStrengthPercent = p
-                tvDimStrengthVal.text = "$p%"
-                SliderThemeManager.saveStyleConfig(this@MainActivity)
-                VolumeOverlayService.instance?.refreshOverlayLive(updateLayout = true)
-            }
-            override fun onStartTrackingTouch(s: SeekBar?) {}
-            override fun onStopTrackingTouch(s: SeekBar?) {}
-        })
-
-        switchDismissOutside.setOnCheckedChangeListener { _, isChecked ->
-            if (isUpdatingControlsProgrammatically) return@setOnCheckedChangeListener
-            SliderThemeManager.getCurrentConfig().dismissOnOutsideTouch = isChecked
-            SliderThemeManager.saveStyleConfig(this)
-            VolumeOverlayService.instance?.refreshOverlayLive(updateLayout = true)
-        }
-
-        btnToggleInteractiveEdit.setOnClickListener {
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val keyCode = event.keyCode
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
             val svc = VolumeOverlayService.instance
-            if (svc == null) {
-                Toast.makeText(this, "הפעל תחילה את שירות המחוון בהגדרות הנגישות", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            val nowEditing = svc.toggleInteractiveEditMode(
-                onPosChanged = { newXPercent, newYPercent ->
-                    runOnUiThread {
-                        isUpdatingControlsProgrammatically = true
-                        seekPosX.progress = newXPercent
-                        tvPosXVal.text = "$newXPercent%"
-                        seekPosY.progress = newYPercent
-                        tvPosYVal.text = "$newYPercent%"
-                        isUpdatingControlsProgrammatically = false
-                    }
-                },
-                onEditClosedFromOverlay = {
-                    runOnUiThread {
-                        updateEditButtonState(false)
-                    }
-                }
-            )
-            updateEditButtonState(nowEditing)
-        }
-
-        seekWidth.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                if (isUpdatingControlsProgrammatically) return
-                val w = p.coerceAtLeast(44)
-                SliderThemeManager.getCurrentConfig().widthDp = w
-                tvWidthVal.text = "$w dp"
-                SliderThemeManager.saveStyleConfig(this@MainActivity)
-                VolumeOverlayService.instance?.refreshOverlayLive(updateLayout = true)
-            }
-            override fun onStartTrackingTouch(s: SeekBar?) {}
-            override fun onStopTrackingTouch(s: SeekBar?) {}
-        })
-
-        seekHeight.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                if (isUpdatingControlsProgrammatically) return
-                val h = p.coerceAtLeast(40)
-                SliderThemeManager.getCurrentConfig().heightDp = h
-                tvHeightVal.text = "$h dp"
-                SliderThemeManager.saveStyleConfig(this@MainActivity)
-                VolumeOverlayService.instance?.refreshOverlayLive(updateLayout = true)
-            }
-            override fun onStartTrackingTouch(s: SeekBar?) {}
-            override fun onStopTrackingTouch(s: SeekBar?) {}
-        })
-
-        seekPosX.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                if (isUpdatingControlsProgrammatically) return
-                SliderThemeManager.getCurrentConfig().posXPercent = p
-                tvPosXVal.text = "$p%"
-                SliderThemeManager.saveStyleConfig(this@MainActivity)
-                VolumeOverlayService.instance?.refreshOverlayLive(updateLayout = true)
-            }
-            override fun onStartTrackingTouch(s: SeekBar?) {}
-            override fun onStopTrackingTouch(s: SeekBar?) {}
-        })
-
-        seekPosY.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                if (isUpdatingControlsProgrammatically) return
-                SliderThemeManager.getCurrentConfig().posYPercent = p
-                tvPosYVal.text = "$p%"
-                SliderThemeManager.saveStyleConfig(this@MainActivity)
-                VolumeOverlayService.instance?.refreshOverlayLive(updateLayout = true)
-            }
-            override fun onStartTrackingTouch(s: SeekBar?) {}
-            override fun onStopTrackingTouch(s: SeekBar?) {}
-        })
-
-        syncUIFromCurrentStyleConfig()
-    }
-
-    private fun dpToPx(dpVal: Float): Int {
-        return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dpVal, resources.displayMetrics).roundToInt()
-    }
-
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (VolumeOverlayService.instance == null) {
-            val maxAllowed = AudioEngine.getEffectiveMaxVolume()
-            val showSysUI = (AudioEngine.sliderStyleIndex == 0)
-            when (keyCode) {
-                KeyEvent.KEYCODE_VOLUME_UP -> {
-                    val next = (AudioEngine.currentTotalVolume + 6).coerceAtMost(maxAllowed)
+            if (svc != null) {
+                val handled = svc.handleVolumeKeyEventDirect(event)
+                seekTotalVolume.progress = AudioEngine.currentTotalVolume
+                return handled
+            } else {
+                if (event.action == KeyEvent.ACTION_DOWN) {
+                    val maxAllowed = AudioEngine.getEffectiveMaxVolume()
+                    val delta = if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) 6 else -6
+                    val next = (AudioEngine.currentTotalVolume + delta).coerceIn(0, maxAllowed)
                     seekTotalVolume.progress = next
-                    AudioEngine.applyVolume(this, next, showNativeSystemUI = showSysUI)
-                    return true
+                    AudioEngine.applyVolume(this, next, showNativeSystemUI = true)
                 }
-                KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                    val next = (AudioEngine.currentTotalVolume - 6).coerceAtLeast(0)
-                    seekTotalVolume.progress = next
-                    AudioEngine.applyVolume(this, next, showNativeSystemUI = showSysUI)
-                    return true
-                }
+                return true
             }
         }
-        return super.onKeyDown(keyCode, event)
+        return super.dispatchKeyEvent(event)
     }
 
     private fun applyPreset(offsetsPercent: List<Int>, bass: Int, surround: Int, reverb: Int) {
@@ -1638,7 +1031,7 @@ class MainActivity : AppCompatActivity() {
 }
 
 // =========================================================================
-// 3. שירות המחוון הצף: טשטוש מסך אופטי אמיתי + Z-Order תיקון ACTION_CANCEL
+// 3. שירות הגברת עוצמת הקול דרך מחוון המערכת המקורי בלבד (Native SystemUI)
 // =========================================================================
 class VolumeOverlayService : AccessibilityService() {
 
@@ -1650,24 +1043,11 @@ class VolumeOverlayService : AccessibilityService() {
     private var audioManager: AudioManager? = null
     private var maxSysVol = 15
 
-    private var backdropTouchThroughView: View? = null
-    private var backdropParams: WindowManager.LayoutParams? = null
-    private var backdropBlurAnimator: ValueAnimator? = null
-
     private var badgeView: TextView? = null
-    private var customOverlayCanvasView: CustomThemedSliderOverlayView? = null
-    private var overlayParams: WindowManager.LayoutParams? = null
-    private var lastAnimatedStyleIndex: Int = -1
-
-    private var isInteractiveEditActive = false
-    private var onLivePositionChangedCallback: ((Int, Int) -> Unit)? = null
-    private var onEditClosedCallback: (() -> Unit)? = null
 
     private val hideHandler = Handler(Looper.getMainLooper())
     private val hideRunnable = Runnable {
-        if (!isInteractiveEditActive) {
-            dismissOverlaysAnimated()
-        }
+        removeBadge()
     }
 
     private val volumeKeyHandler = Handler(Looper.getMainLooper())
@@ -1698,23 +1078,17 @@ class VolumeOverlayService : AccessibilityService() {
         }
     }
 
-    fun isEditModeActive(): Boolean = isInteractiveEditActive
-
     override fun onKeyEvent(event: KeyEvent): Boolean {
         return handleVolumeKeyEventDirect(event)
     }
 
     fun handleVolumeKeyEventDirect(event: KeyEvent): Boolean {
+        if (!AudioEngine.isBoosterActive) return false
+
         val keyCode = event.keyCode
         val isVolumeKey = (keyCode == KeyEvent.KEYCODE_VOLUME_UP ||
                            keyCode == KeyEvent.KEYCODE_VOLUME_DOWN ||
                            keyCode == KeyEvent.KEYCODE_VOLUME_MUTE)
-
-        val shouldInterceptVolume = AudioEngine.isBoosterActive ||
-                                    AudioEngine.sliderOnlyNoBoostMode ||
-                                    (AudioEngine.sliderStyleIndex != 0)
-
-        if (!shouldInterceptVolume) return false
 
         if (!isVolumeKey) {
             if (keyCode == KeyEvent.KEYCODE_POWER && (isVolUpPressed || isVolDownPressed)) {
@@ -1723,22 +1097,11 @@ class VolumeOverlayService : AccessibilityService() {
             return false
         }
 
-        if (AudioEngine.isInternalVolumeChange) return true
-
-        if (isInteractiveEditActive) {
-            if (event.action == KeyEvent.ACTION_DOWN) {
-                closeInteractiveEditMode()
-            }
-            return true
-        }
-
         if (keyCode == KeyEvent.KEYCODE_VOLUME_MUTE) {
             if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
                 val next = if (AudioEngine.currentTotalVolume > 0) 0 else 60
-                AudioEngine.applyVolume(this, next, showNativeSystemUI = (AudioEngine.sliderStyleIndex == 0))
-                if (AudioEngine.sliderStyleIndex != 0) {
-                    showCustomThemedOverlay(playEnterAnim = false)
-                }
+                AudioEngine.applyVolume(this, next, showNativeSystemUI = true)
+                showNativeBadgeIfNeeded()
             }
             return true
         }
@@ -1770,8 +1133,7 @@ class VolumeOverlayService : AccessibilityService() {
                 return true
             }
 
-            // תיקון קריטי: שימוש ב-MotionEvent.ACTION_CANCEL במקום ACTION_CANCEL גלובלי שגרם לשגיאת הקומפילציה
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL, KeyEvent.ACTION_UP -> {
+            KeyEvent.ACTION_UP -> {
                 if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) isVolUpPressed = false
                 if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) isVolDownPressed = false
 
@@ -1793,8 +1155,6 @@ class VolumeOverlayService : AccessibilityService() {
 
     private fun stepVolumeInDirection(direction: Int, stepAmount: Int) {
         AudioEngine.refreshBluetoothAndStreamState(this)
-
-        val useNativeSystemUI = (AudioEngine.sliderStyleIndex == 0)
         val maxAllowed = AudioEngine.getEffectiveMaxVolume()
 
         val nextVol = if (direction > 0) {
@@ -1803,346 +1163,21 @@ class VolumeOverlayService : AccessibilityService() {
             (AudioEngine.currentTotalVolume - stepAmount).coerceAtLeast(0)
         }
 
-        AudioEngine.applyVolume(this, nextVol, showNativeSystemUI = useNativeSystemUI)
-
-        if (useNativeSystemUI) {
-            removeCustomOverlayImmediate()
-            showNativeBadgeIfNeeded()
-        } else {
-            removeBadge()
-            showCustomThemedOverlay(playEnterAnim = false)
-        }
-    }
-
-    fun toggleInteractiveEditMode(
-        onPosChanged: (Int, Int) -> Unit,
-        onEditClosedFromOverlay: () -> Unit
-    ): Boolean {
-        onLivePositionChangedCallback = onPosChanged
-        onEditClosedCallback = onEditClosedFromOverlay
-
-        if (isInteractiveEditActive) {
-            closeInteractiveEditMode()
-        } else {
-            isInteractiveEditActive = true
-            hideHandler.removeCallbacks(hideRunnable)
-            if (AudioEngine.sliderStyleIndex == 0) {
-                AudioEngine.sliderStyleIndex = 1
-            }
-            removeBadge()
-            showCustomThemedOverlay(playEnterAnim = true)
-            customOverlayCanvasView?.isEditPositionMode = true
-            customOverlayCanvasView?.invalidate()
-        }
-        return isInteractiveEditActive
-    }
-
-    fun closeInteractiveEditMode() {
-        isInteractiveEditActive = false
-        customOverlayCanvasView?.isEditPositionMode = false
-        customOverlayCanvasView?.invalidate()
-        onEditClosedCallback?.invoke()
-        hideHandler.removeCallbacks(hideRunnable)
-        hideHandler.postDelayed(hideRunnable, 1200)
-    }
-
-    fun triggerPreviewOverlay(playEnterAnim: Boolean = true) {
-        hideHandler.removeCallbacks(hideRunnable)
-        AudioEngine.suppressSystemUILoopUntil = SystemClock.elapsedRealtime() + 1000L
-        AudioEngine.updateBluetoothStatusOnly(this)
-        if (AudioEngine.sliderStyleIndex == 0) {
-            removeCustomOverlayImmediate()
-            AudioEngine.applyVolume(this, AudioEngine.currentTotalVolume, showNativeSystemUI = true)
-            showNativeBadgeIfNeeded()
-        } else {
-            removeBadge()
-            showCustomThemedOverlay(playEnterAnim = playEnterAnim)
-        }
-    }
-
-    fun refreshOverlayLive(updateLayout: Boolean = false) {
-        if (customOverlayCanvasView == null) {
-            if (updateLayout) triggerPreviewOverlay(playEnterAnim = true)
-            return
-        }
-        if (updateLayout) {
-            val wm = windowManager ?: return
-            updateFrostedGlassBackdrop(animateIn = false)
-            val params = buildSliderWindowLayoutParams()
-            overlayParams = params
-            runCatching { wm.updateViewLayout(customOverlayCanvasView, params) }
-        } else {
-            updateFrostedGlassBackdrop(animateIn = false)
-        }
-        customOverlayCanvasView?.invalidate()
-        if (!isInteractiveEditActive) {
-            hideHandler.removeCallbacks(hideRunnable)
-            hideHandler.postDelayed(hideRunnable, 3400)
-        }
+        AudioEngine.applyVolume(this, nextVol, showNativeSystemUI = true)
+        showNativeBadgeIfNeeded()
     }
 
     private fun dp(value: Float): Int {
         return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, resources.displayMetrics).roundToInt()
     }
 
-    private fun applyBackdropVisualProgress(progress: Float) {
-        val bdView = backdropTouchThroughView ?: return
-        val wm = windowManager ?: return
-        val lp = backdropParams ?: return
-        val cfg = SliderThemeManager.getCurrentConfig()
-
-        val p = progress.coerceIn(0f, 1f)
-        val blurTarget = if (cfg.blurBackgroundEnabled) {
-            ((cfg.blurStrengthPercent / 100f) * 125f * p).roundToInt()
-        } else 0
-
-        val blurTintAlpha = if (cfg.blurBackgroundEnabled) {
-            ((cfg.blurStrengthPercent / 100f) * 170f * p).roundToInt()
-        } else 0
-        val dimTintAlpha = if (cfg.dimBackgroundEnabled) {
-            ((cfg.dimStrengthPercent / 100f) * 215f * p).roundToInt()
-        } else 0
-
-        val baseAlpha = maxOf(blurTintAlpha, dimTintAlpha).coerceIn(0, 235)
-        val sideAlpha = (baseAlpha * 1.12f).roundToInt().coerceIn(0, 245)
-
-        val isRightSide = cfg.posXPercent >= 50
-        val startCol = Color.argb(if (isRightSide) (baseAlpha * 0.78f).roundToInt() else sideAlpha, 12, 16, 24)
-        val endCol = Color.argb(if (isRightSide) sideAlpha else (baseAlpha * 0.78f).roundToInt(), 18, 22, 32)
-
-        bdView.background = GradientDrawable(
-            GradientDrawable.Orientation.LEFT_RIGHT,
-            intArrayOf(startCol, endCol)
-        )
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            lp.blurBehindRadius = blurTarget
-            if (bdView.isAttachedToWindow) {
-                runCatching { wm.updateViewLayout(bdView, lp) }
-            }
-        }
-    }
-
-    private fun updateFrostedGlassBackdrop(animateIn: Boolean) {
-        val wm = windowManager ?: return
-        val cfg = SliderThemeManager.getCurrentConfig()
-        val needsBackdrop = (cfg.dimBackgroundEnabled && cfg.dimStrengthPercent > 0) ||
-                            (cfg.blurBackgroundEnabled && cfg.blurStrengthPercent > 0)
-
-        if (!needsBackdrop) {
-            removeBackdropImmediate()
-            return
-        }
-
-        backdropBlurAnimator?.cancel()
-
-        var flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                    WindowManager.LayoutParams.FLAG_DIM_BEHIND
-
-        if (cfg.blurBackgroundEnabled && cfg.blurStrengthPercent > 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            flags = flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
-        }
-
-        val targetDimAmount = if (cfg.dimBackgroundEnabled) {
-            ((cfg.dimStrengthPercent / 100f) * 0.55f).coerceIn(0f, 0.75f)
-        } else if (cfg.blurBackgroundEnabled) {
-            ((cfg.blurStrengthPercent / 100f) * 0.35f).coerceIn(0f, 0.50f)
-        } else 0f
-
-        val targetBlurRadius = if (cfg.blurBackgroundEnabled) {
-            ((cfg.blurStrengthPercent / 100f) * 125).roundToInt().coerceAtLeast(1)
-        } else 0
-
-        if (backdropTouchThroughView == null) {
-            val lp = WindowManager.LayoutParams(
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-                flags,
-                PixelFormat.TRANSLUCENT
-            ).apply {
-                dimAmount = targetDimAmount
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    blurBehindRadius = if (animateIn) 1 else targetBlurRadius
-                }
-            }
-            backdropParams = lp
-            backdropTouchThroughView = View(this)
-            applyBackdropVisualProgress(if (animateIn) 0.1f else 1f)
-            runCatching { wm.addView(backdropTouchThroughView, lp) }
-
-            customOverlayCanvasView?.let { slider ->
-                if (slider.isAttachedToWindow && overlayParams != null) {
-                    runCatching {
-                        wm.removeView(slider)
-                        wm.addView(slider, overlayParams)
-                    }
-                }
-            }
-
-            if (animateIn) {
-                backdropBlurAnimator = ValueAnimator.ofFloat(0.1f, 1f).apply {
-                    duration = 250L
-                    interpolator = DecelerateInterpolator()
-                    addUpdateListener { anim ->
-                        applyBackdropVisualProgress(anim.animatedValue as Float)
-                    }
-                    start()
-                }
-            }
-        } else {
-            backdropParams?.let { lp ->
-                lp.flags = flags
-                lp.dimAmount = targetDimAmount
-                applyBackdropVisualProgress(1f)
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-                    runCatching { wm.updateViewLayout(backdropTouchThroughView, lp) }
-                }
-            }
-        }
-    }
-
-    private fun buildSliderWindowLayoutParams(): WindowManager.LayoutParams {
-        val cfg = SliderThemeManager.getCurrentConfig()
-        val metrics = resources.displayMetrics
-        val screenW = metrics.widthPixels
-        val screenH = metrics.heightPixels
-
-        val viewW = dp(cfg.widthDp.toFloat()).coerceIn(dp(44f), screenW)
-        val viewH = dp(cfg.heightDp.toFloat()).coerceIn(dp(40f), screenH)
-
-        val flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                    WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-
-        val maxOffsetX = (screenW - viewW).coerceAtLeast(1)
-        val maxOffsetY = (screenH - viewH).coerceAtLeast(1)
-
-        return WindowManager.LayoutParams(
-            viewW,
-            viewH,
-            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-            flags,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = ((cfg.posXPercent / 100f) * maxOffsetX).roundToInt()
-            y = ((cfg.posYPercent / 100f) * maxOffsetY).roundToInt()
-        }
-    }
-
-    private fun showCustomThemedOverlay(playEnterAnim: Boolean = false) {
-        hideHandler.removeCallbacks(hideRunnable)
-        val wm = windowManager ?: return
-
-        val isNewWindow = (customOverlayCanvasView == null)
-        val styleChanged = (lastAnimatedStyleIndex != AudioEngine.sliderStyleIndex)
-        lastAnimatedStyleIndex = AudioEngine.sliderStyleIndex
-
-        updateFrostedGlassBackdrop(animateIn = isNewWindow || playEnterAnim)
-
-        if (customOverlayCanvasView == null) {
-            customOverlayCanvasView = CustomThemedSliderOverlayView(
-                context = this,
-                onVolumeDragged = { newVol ->
-                    AudioEngine.applyVolume(this@VolumeOverlayService, newVol, showNativeSystemUI = false)
-                    if (!isInteractiveEditActive) {
-                        hideHandler.removeCallbacks(hideRunnable)
-                        hideHandler.postDelayed(hideRunnable, 3400)
-                    }
-                },
-                onPositionDragged = { dx, dy ->
-                    val cfg = SliderThemeManager.getCurrentConfig()
-                    val metrics = resources.displayMetrics
-                    val viewW = dp(cfg.widthDp.toFloat())
-                    val viewH = dp(cfg.heightDp.toFloat())
-                    val maxX = (metrics.widthPixels - viewW).coerceAtLeast(1)
-                    val maxY = (metrics.heightPixels - viewH).coerceAtLeast(1)
-
-                    val curPxX = ((cfg.posXPercent / 100f) * maxX) + dx
-                    val curPxY = ((cfg.posYPercent / 100f) * maxY) + dy
-
-                    cfg.posXPercent = ((curPxX / maxX) * 100f).roundToInt().coerceIn(0, 100)
-                    cfg.posYPercent = ((curPxY / maxY) * 100f).roundToInt().coerceIn(0, 100)
-
-                    SliderThemeManager.saveStyleConfig(this@VolumeOverlayService)
-                    refreshOverlayLive(updateLayout = true)
-                    onLivePositionChangedCallback?.invoke(cfg.posXPercent, cfg.posYPercent)
-                },
-                onFinishEditClicked = {
-                    closeInteractiveEditMode()
-                },
-                onOutsideTouchDismiss = {
-                    hideHandler.removeCallbacks(hideRunnable)
-                    dismissOverlaysAnimated()
-                }
-            ).apply {
-                isEditPositionMode = isInteractiveEditActive
-            }
-
-            overlayParams = buildSliderWindowLayoutParams()
-            runCatching { wm.addView(customOverlayCanvasView, overlayParams) }
-            customOverlayCanvasView?.playCustomEnterAnimation(AudioEngine.sliderStyleIndex)
-        } else {
-            customOverlayCanvasView?.isAnimatingExit = false
-            refreshOverlayLive(updateLayout = true)
-            if (playEnterAnim || styleChanged) {
-                customOverlayCanvasView?.playCustomEnterAnimation(AudioEngine.sliderStyleIndex)
-            } else {
-                customOverlayCanvasView?.animate()?.cancel()
-                customOverlayCanvasView?.alpha = 1f
-                customOverlayCanvasView?.translationX = 0f
-                customOverlayCanvasView?.translationY = 0f
-                customOverlayCanvasView?.scaleX = 1f
-                customOverlayCanvasView?.scaleY = 1f
-            }
-        }
-
-        if (!isInteractiveEditActive) {
-            hideHandler.postDelayed(hideRunnable, 3400)
-        }
-    }
-
-    fun dismissOverlaysAnimated() {
-        removeBadge()
-        val sliderView = customOverlayCanvasView
-        if (sliderView == null) {
-            removeBackdropImmediate()
-            return
-        }
-
-        if (backdropTouchThroughView != null) {
-            backdropBlurAnimator?.cancel()
-            backdropBlurAnimator = ValueAnimator.ofFloat(1f, 0f).apply {
-                duration = 210L
-                addUpdateListener { anim ->
-                    applyBackdropVisualProgress(anim.animatedValue as Float)
-                }
-                addListener(object : AnimatorListenerAdapter() {
-                    override fun onAnimationEnd(animation: Animator) {
-                        removeBackdropImmediate()
-                    }
-                })
-                start()
-            }
-        }
-
-        sliderView.playCustomExitAnimation(AudioEngine.sliderStyleIndex) {
-            removeCustomOverlayImmediate()
-        }
-    }
-
     private fun showNativeBadgeIfNeeded() {
         hideHandler.removeCallbacks(hideRunnable)
-        if (AudioEngine.currentTotalVolume <= 100 || AudioEngine.sliderOnlyNoBoostMode) {
+        if (AudioEngine.currentTotalVolume <= 100) {
             removeBadge()
             return
         }
         val wm = windowManager ?: return
-        val cfg = SliderThemeManager.configs[0] ?: SliderThemeManager.getCurrentConfig()
 
         if (badgeView == null) {
             badgeView = TextView(this).apply {
@@ -2166,31 +1201,21 @@ class VolumeOverlayService : AccessibilityService() {
             runCatching { wm.addView(badgeView, params) }
         }
 
-        val padH = dp(10f + (cfg.extraParam1 / 100f) * 12f)
-        val padV = dp(6f + (cfg.extraParam1 / 100f) * 6f)
+        val padH = dp(16f)
+        val padV = dp(9f)
         val btMark = if (AudioEngine.isBluetoothConnected) " ᛒ" else ""
         badgeView?.apply {
             setPadding(padH, padV, padH, padV)
-            textSize = cfg.textSizeSp.toFloat()
+            textSize = 13f
             background = GradientDrawable().apply {
-                setColor(cfg.colors[0])
-                cornerRadius = dp(cfg.cornerRadiusDp.toFloat()).toFloat()
-                setStroke(dp(cfg.borderWidthDp.toFloat()), cfg.colors[1])
+                setColor(Color.parseColor("#EEF2F6"))
+                cornerRadius = dp(24f).toFloat()
+                setStroke(dp(2f), Color.parseColor("#3B607A"))
             }
-            setTextColor(cfg.colors[2])
+            setTextColor(Color.parseColor("#1B2C38"))
             text = "${AudioEngine.currentTotalVolume}% HD$btMark"
         }
         hideHandler.postDelayed(hideRunnable, 2800)
-    }
-
-    private fun removeBackdropImmediate() {
-        backdropBlurAnimator?.cancel()
-        backdropBlurAnimator = null
-        backdropTouchThroughView?.let {
-            runCatching { windowManager?.removeView(it) }
-            backdropTouchThroughView = null
-        }
-        backdropParams = null
     }
 
     private fun removeBadge() {
@@ -2200,30 +1225,13 @@ class VolumeOverlayService : AccessibilityService() {
         }
     }
 
-    private fun removeCustomOverlayImmediate() {
-        customOverlayCanvasView?.let {
-            it.animate().cancel()
-            runCatching { windowManager?.removeView(it) }
-            customOverlayCanvasView = null
-        }
-        removeBackdropImmediate()
-    }
-
-    private fun removeAllOverlaysImmediate() {
-        removeBadge()
-        removeCustomOverlayImmediate()
-    }
-
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        val now = SystemClock.elapsedRealtime()
-        if (now < AudioEngine.suppressSystemUILoopUntil || AudioEngine.isInternalVolumeChange) return
-
         val pkg = event?.packageName?.toString() ?: ""
         if (pkg.contains("systemui", ignoreCase = true)) {
             val cls = event?.className?.toString() ?: ""
             if (cls.contains("Screenshot", ignoreCase = true) || cls.contains("GlobalActions", ignoreCase = true)) {
                 cancelVolumeHold()
-                removeAllOverlaysImmediate()
+                removeBadge()
             }
         }
     }
@@ -2234,7 +1242,7 @@ class VolumeOverlayService : AccessibilityService() {
         super.onDestroy()
         volumeKeyHandler.removeCallbacksAndMessages(null)
         hideHandler.removeCallbacksAndMessages(null)
-        removeAllOverlaysImmediate()
+        removeBadge()
         instance = null
     }
 }
