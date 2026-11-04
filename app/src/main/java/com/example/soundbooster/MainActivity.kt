@@ -4,8 +4,11 @@ import android.Manifest
 import android.accessibilityservice.AccessibilityService
 import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Color
@@ -25,6 +28,7 @@ import android.media.audiofx.Equalizer
 import android.media.audiofx.LoudnessEnhancer
 import android.media.audiofx.PresetReverb
 import android.media.audiofx.Virtualizer
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
 import android.os.CountDownTimer
@@ -43,17 +47,21 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
+import org.json.JSONArray
+import org.json.JSONObject
 import kotlin.concurrent.thread
 import kotlin.math.abs
 import kotlin.math.log10
@@ -71,7 +79,6 @@ object HapticEngine {
         return context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
     }
 
-    // רטט עדין וקצר לגרירת מחוונים (מוגבל בתדירות כדי לא להעמיס על המנוע)
     fun tick(context: Context) {
         if (!AudioEngine.hapticFeedbackEnabled) return
         val now = SystemClock.elapsedRealtime()
@@ -90,7 +97,6 @@ object HapticEngine {
         }
     }
 
-    // רטט קליק ברור ללחיצה על כפתורים, לשוניות ומתגים
     fun click(context: Context) {
         if (!AudioEngine.hapticFeedbackEnabled) return
         runCatching {
@@ -106,7 +112,6 @@ object HapticEngine {
         }
     }
 
-    // רטט מודגש בחציית סף חשוב (100% / 200% / 300%)
     fun heavyMilestone(context: Context) {
         if (!AudioEngine.hapticFeedbackEnabled) return
         runCatching {
@@ -139,7 +144,6 @@ object ToneCalibrationEngine {
                 val samples = ShortArray(numSamples)
                 for (i in 0 until numSamples) {
                     val angle = 2.0 * Math.PI * i * freqHz / sampleRate
-                    // מעטפת Fade-In ו-Fade-Out למניעת קליק בתחילת/סוף הצליל
                     val env = when {
                         i < 1500 -> i / 1500.0
                         i > numSamples - 1500 -> (numSamples - i) / 1500.0
@@ -203,6 +207,27 @@ object AudioEngine {
     var pillPosX: Int = 16
     var pillPosY: Int = -155
 
+    // איזון ערוצים שמאל / ימין (L/R Stereo Balance: 0=Full Left, 100=Center, 200=Full Right)
+    var lrBalanceProgress: Int = 100
+
+    // פסיכו-אקוסטיקה: פיצוי תדרים בווליום נמוך + מניעת עייפות שמיעה
+    var loudnessContourEnabled: Boolean = true
+    var antiFatigueModeEnabled: Boolean = false
+
+    // הגנות ניתוק אוזניות והתרחקות בלוטות'
+    var autoRestoreSpeakerOnUnplug: Boolean = true
+    var btRangeDropGuardEnabled: Boolean = true
+    var savedSpeakerOnlyVolume: Int = 85
+    var savedHeadphonesOnlyVolume: Int = 120
+    private var wasHeadphonesConnectedLastCheck: Boolean = false
+    private var wasBluetoothConnectedLastCheck: Boolean = false
+
+    // חיסכון סוללה חכם, AMOLED Black וערכת צבעי הדגש
+    var autoBatterySaverDspEnabled: Boolean = true
+    var isLowBatteryDetected: Boolean = false
+    var amoledBlackThemeEnabled: Boolean = false
+    var accentThemeIndex: Int = 0 // 0=Neon Green, 1=Cyber Cyan, 2=Studio Gold, 3=Ultra Purple
+
     // פרופילי ניתוב שמע (Audio Output Routing Profiles):
     // 0 = Auto Detect, 1 = Phone Speaker, 2 = Wired Headphones, 3 = Bluetooth Audio, 4 = Car Audio
     var selectedRoutingProfileMode: Int = 0
@@ -228,7 +253,7 @@ object AudioEngine {
     var vocalDialogueModeEnabled: Boolean = false
     var vocalDialogueStrength: Int = 70
     var personalCalibrationEnabled: Boolean = true
-    val personalEarOffsetsDb = floatArrayOf(1.5f, 1.0f, 2.2f) // פיצוי רגישות נמוכים / אמצע / גבוהים
+    val personalEarOffsetsDb = floatArrayOf(1.5f, 1.0f, 2.2f)
 
     // 0 = מדיה, 1 = עוצמת צלצול, 2 = התראות, 3 = שעון מעורר, 4 = שיחת טלפון
     var activeStreamType: Int = 0
@@ -281,6 +306,15 @@ object AudioEngine {
         "משחקים (Games)",
         "WhatsApp / פודקאסט"
     )
+
+    fun getPrimaryAccentColor(): Int {
+        return when (accentThemeIndex) {
+            1 -> Color.parseColor("#00E5FF")
+            2 -> Color.parseColor("#FFD740")
+            3 -> Color.parseColor("#BB86FC")
+            else -> Color.parseColor("#00E676")
+        }
+    }
 
     fun isHeadphonesActive(): Boolean {
         val effectiveProfile = getEffectiveOutputProfile()
@@ -338,6 +372,15 @@ object AudioEngine {
         }
     }
 
+    fun checkBatteryLevelState(context: Context): Boolean {
+        runCatching {
+            val bm = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
+            val pct = bm?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: 100
+            isLowBatteryDetected = (pct in 1..15)
+        }
+        return isLowBatteryDetected
+    }
+
     fun updateBluetoothStatusOnly(context: Context) {
         val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
         var btFound = false
@@ -365,6 +408,29 @@ object AudioEngine {
                 }
             }
         }
+
+        val nowHeadphones = btFound || wiredFound
+        if (isInitializedOnce && activeStreamType == 0) {
+            // זיהוי ניתוק אוזניות או נפילת טווח בלוטות' ושחזור אוטומטי של ווליום רמקול בטוח
+            if (wasHeadphonesConnectedLastCheck && !nowHeadphones) {
+                savedHeadphonesOnlyVolume = currentTotalVolume
+                if (autoRestoreSpeakerOnUnplug || (wasBluetoothConnectedLastCheck && btRangeDropGuardEnabled)) {
+                    val safeSpeakerVol = savedSpeakerOnlyVolume.coerceIn(20, 100)
+                    currentTotalVolume = safeSpeakerVol
+                    savedMediaBoostVolume = safeSpeakerVol
+                    runCatching { loudnessEnhancer?.setTargetGain(0) }
+                }
+            } else if (!wasHeadphonesConnectedLastCheck && nowHeadphones) {
+                savedSpeakerOnlyVolume = currentTotalVolume.coerceIn(0, 110)
+                if (autoRestoreSpeakerOnUnplug) {
+                    currentTotalVolume = savedHeadphonesOnlyVolume.coerceIn(0, getEffectiveMaxVolume())
+                    savedMediaBoostVolume = currentTotalVolume
+                }
+            }
+        }
+
+        wasHeadphonesConnectedLastCheck = nowHeadphones
+        wasBluetoothConnectedLastCheck = btFound
         isBluetoothConnected = btFound
         isWiredHeadsetConnected = wiredFound
         detectedHardwareRoute = when {
@@ -372,6 +438,7 @@ object AudioEngine {
             wiredFound -> 2
             else -> 1
         }
+        checkBatteryLevelState(context)
     }
 
     fun refreshBluetoothAndStreamState(context: Context) {
@@ -420,7 +487,6 @@ object AudioEngine {
         currentTotalVolume = ((curSys.toFloat() / maxSys) * 100f).roundToInt().coerceIn(0, 100)
     }
 
-    // זיהוי אפליקציה פעילה והחלת ווליום ייעודי (Per-App Volume Control)
     fun onForegroundAppDetected(context: Context, packageName: String) {
         if (!perAppVolumeEnabled || !isBoosterActive || activeStreamType != 0) return
         val pkg = packageName.lowercase()
@@ -454,11 +520,10 @@ object AudioEngine {
         }
     }
 
-    // ניטור רעש סביבתי (Ambient Noise Auto-Boost)
     @SuppressLint("MissingPermission")
     fun setAmbientNoiseMonitor(context: Context, enable: Boolean) {
         ambientNoiseBoostEnabled = enable
-        if (!enable) {
+        if (!enable || (autoBatterySaverDspEnabled && isLowBatteryDetected)) {
             ambientMonitorRunning = false
             currentAmbientAutoBonusGainMb = 0
             reapplyCurrentGainSafely()
@@ -509,7 +574,6 @@ object AudioEngine {
                     val rms = sqrt(sumSq / read).coerceAtLeast(1.0)
                     val approxDb = (20.0 * log10(rms)).toInt().coerceIn(25, 95)
 
-                    // מעל 52dB נחשב סביבה רועשת (אוטובוס/רחוב) -> מוסיף פיצוי הגברה אוטומטי
                     val noiseExcess = (approxDb - 52).coerceAtLeast(0)
                     val sensFactor = ambientSensitivityPercent / 100f
                     currentAmbientAutoBonusGainMb = (noiseExcess * 18f * sensFactor).roundToInt().coerceIn(0, 750)
@@ -568,6 +632,105 @@ object AudioEngine {
         }.start()
     }
 
+    // ייצוא ושחזור מלא של כל הגדרות הסאונד לפורמט JSON
+    fun exportConfigurationToJson(): String {
+        val root = JSONObject()
+        root.put("allow_300_boost", allow300PercentBoost)
+        root.put("hearing_safe_guard", hearingSafeGuardEnabled)
+        root.put("haptic_en", hapticFeedbackEnabled)
+        root.put("mono_downmix_en", monoDownmixEnabled)
+        root.put("lr_balance", lrBalanceProgress)
+        root.put("loudness_contour", loudnessContourEnabled)
+        root.put("anti_fatigue", antiFatigueModeEnabled)
+        root.put("auto_restore_unplug", autoRestoreSpeakerOnUnplug)
+        root.put("bt_range_guard", btRangeDropGuardEnabled)
+        root.put("battery_saver_dsp", autoBatterySaverDspEnabled)
+        root.put("amoled_black", amoledBlackThemeEnabled)
+        root.put("accent_theme", accentThemeIndex)
+        root.put("routing_profile_mode", selectedRoutingProfileMode)
+        root.put("per_app_vol_en", perAppVolumeEnabled)
+        root.put("vocal_dialogue_en", vocalDialogueModeEnabled)
+        root.put("vocal_dialogue_str", vocalDialogueStrength)
+        root.put("personal_cal_en", personalCalibrationEnabled)
+        root.put("mb_limiter_en", multiBandLimiterEnabled)
+        root.put("mb_low", mbLowControl)
+        root.put("mb_mid", mbMidControl)
+        root.put("mb_high", mbHighControl)
+        root.put("param_q_prog", parametricQFactorProgress)
+        root.put("ai_song_en", aiSongEngineEnabled)
+        root.put("ai_preset_mode", aiPresetMode)
+        root.put("ai_intensity", aiNeuralIntensity)
+        root.put("song_remaster_en", songRemasterEnabled)
+        root.put("song_upscale", songUpscaleLevel)
+        root.put("song_sep", songSeparationLevel)
+        root.put("song_punch", songPunchLevel)
+        root.put("clarity", clarityLevel)
+        root.put("warmth", warmthLevel)
+
+        val eqArr = JSONArray()
+        for (b in 0 until 10) eqArr.put(parametricBandGainsDb[b].toDouble())
+        root.put("eq_10_bands", eqArr)
+
+        val appArr = JSONArray()
+        for (i in 0..4) appArr.put(perAppVolumes[i])
+        root.put("per_app_volumes", appArr)
+
+        return root.toString(2)
+    }
+
+    fun importConfigurationFromJson(context: Context, jsonStr: String): Boolean {
+        return runCatching {
+            val root = JSONObject(jsonStr)
+            allow300PercentBoost = root.optBoolean("allow_300_boost", allow300PercentBoost)
+            hearingSafeGuardEnabled = root.optBoolean("hearing_safe_guard", hearingSafeGuardEnabled)
+            hapticFeedbackEnabled = root.optBoolean("haptic_en", hapticFeedbackEnabled)
+            monoDownmixEnabled = root.optBoolean("mono_downmix_en", monoDownmixEnabled)
+            lrBalanceProgress = root.optInt("lr_balance", lrBalanceProgress).coerceIn(0, 200)
+            loudnessContourEnabled = root.optBoolean("loudness_contour", loudnessContourEnabled)
+            antiFatigueModeEnabled = root.optBoolean("anti_fatigue", antiFatigueModeEnabled)
+            autoRestoreSpeakerOnUnplug = root.optBoolean("auto_restore_unplug", autoRestoreSpeakerOnUnplug)
+            btRangeDropGuardEnabled = root.optBoolean("bt_range_guard", btRangeDropGuardEnabled)
+            autoBatterySaverDspEnabled = root.optBoolean("battery_saver_dsp", autoBatterySaverDspEnabled)
+            amoledBlackThemeEnabled = root.optBoolean("amoled_black", amoledBlackThemeEnabled)
+            accentThemeIndex = root.optInt("accent_theme", accentThemeIndex).coerceIn(0, 3)
+            selectedRoutingProfileMode = root.optInt("routing_profile_mode", selectedRoutingProfileMode).coerceIn(0, 4)
+            perAppVolumeEnabled = root.optBoolean("per_app_vol_en", perAppVolumeEnabled)
+            vocalDialogueModeEnabled = root.optBoolean("vocal_dialogue_en", vocalDialogueModeEnabled)
+            vocalDialogueStrength = root.optInt("vocal_dialogue_str", vocalDialogueStrength).coerceIn(0, 100)
+            personalCalibrationEnabled = root.optBoolean("personal_cal_en", personalCalibrationEnabled)
+            multiBandLimiterEnabled = root.optBoolean("mb_limiter_en", multiBandLimiterEnabled)
+            mbLowControl = root.optInt("mb_low", mbLowControl).coerceIn(0, 100)
+            mbMidControl = root.optInt("mb_mid", mbMidControl).coerceIn(0, 100)
+            mbHighControl = root.optInt("mb_high", mbHighControl).coerceIn(0, 100)
+            parametricQFactorProgress = root.optInt("param_q_prog", parametricQFactorProgress).coerceIn(0, 40)
+            aiSongEngineEnabled = root.optBoolean("ai_song_en", aiSongEngineEnabled)
+            aiPresetMode = root.optInt("ai_preset_mode", aiPresetMode).coerceIn(0, 3)
+            aiNeuralIntensity = root.optInt("ai_intensity", aiNeuralIntensity).coerceIn(0, 100)
+            songRemasterEnabled = root.optBoolean("song_remaster_en", songRemasterEnabled)
+            songUpscaleLevel = root.optInt("song_upscale", songUpscaleLevel).coerceIn(0, 100)
+            songSeparationLevel = root.optInt("song_sep", songSeparationLevel).coerceIn(0, 100)
+            songPunchLevel = root.optInt("song_punch", songPunchLevel).coerceIn(0, 100)
+            clarityLevel = root.optInt("clarity", clarityLevel).coerceIn(0, 100)
+            warmthLevel = root.optInt("warmth", warmthLevel).coerceIn(0, 100)
+
+            root.optJSONArray("eq_10_bands")?.let { arr ->
+                for (b in 0 until minOf(10, arr.length())) {
+                    parametricBandGainsDb[b] = arr.optDouble(b, 0.0).toFloat().coerceIn(-15f, 15f)
+                }
+            }
+            root.optJSONArray("per_app_volumes")?.let { arr ->
+                for (i in 0 until minOf(5, arr.length())) {
+                    perAppVolumes[i] = arr.optInt(i, perAppVolumes[i]).coerceIn(0, 300)
+                }
+            }
+
+            saveEngineModes(context)
+            updateSoundQualityDSP()
+            reapplyCurrentGainSafely()
+            true
+        }.getOrDefault(false)
+    }
+
     fun init(context: Context? = null) {
         context?.let {
             val prefs = it.getSharedPreferences("sound_booster_hd", Context.MODE_PRIVATE)
@@ -578,6 +741,18 @@ object AudioEngine {
             alwaysShowDraggableMiniPill = prefs.getBoolean("always_mini_pill", alwaysShowDraggableMiniPill)
             pillPosX = prefs.getInt("pill_pos_x", pillPosX)
             pillPosY = prefs.getInt("pill_pos_y", pillPosY)
+
+            lrBalanceProgress = prefs.getInt("lr_balance", lrBalanceProgress)
+            loudnessContourEnabled = prefs.getBoolean("loudness_contour", loudnessContourEnabled)
+            antiFatigueModeEnabled = prefs.getBoolean("anti_fatigue", antiFatigueModeEnabled)
+            autoRestoreSpeakerOnUnplug = prefs.getBoolean("auto_restore_unplug", autoRestoreSpeakerOnUnplug)
+            btRangeDropGuardEnabled = prefs.getBoolean("bt_range_guard", btRangeDropGuardEnabled)
+            savedSpeakerOnlyVolume = prefs.getInt("saved_spk_only_vol", savedSpeakerOnlyVolume)
+            savedHeadphonesOnlyVolume = prefs.getInt("saved_hp_only_vol", savedHeadphonesOnlyVolume)
+
+            autoBatterySaverDspEnabled = prefs.getBoolean("battery_saver_dsp", autoBatterySaverDspEnabled)
+            amoledBlackThemeEnabled = prefs.getBoolean("amoled_black", amoledBlackThemeEnabled)
+            accentThemeIndex = prefs.getInt("accent_theme", accentThemeIndex)
 
             selectedRoutingProfileMode = prefs.getInt("routing_profile_mode", selectedRoutingProfileMode)
             perAppVolumeEnabled = prefs.getBoolean("per_app_vol_en", perAppVolumeEnabled)
@@ -644,6 +819,16 @@ object AudioEngine {
             .putBoolean("always_mini_pill", alwaysShowDraggableMiniPill)
             .putInt("pill_pos_x", pillPosX)
             .putInt("pill_pos_y", pillPosY)
+            .putInt("lr_balance", lrBalanceProgress)
+            .putBoolean("loudness_contour", loudnessContourEnabled)
+            .putBoolean("anti_fatigue", antiFatigueModeEnabled)
+            .putBoolean("auto_restore_unplug", autoRestoreSpeakerOnUnplug)
+            .putBoolean("bt_range_guard", btRangeDropGuardEnabled)
+            .putInt("saved_spk_only_vol", savedSpeakerOnlyVolume)
+            .putInt("saved_hp_only_vol", savedHeadphonesOnlyVolume)
+            .putBoolean("battery_saver_dsp", autoBatterySaverDspEnabled)
+            .putBoolean("amoled_black", amoledBlackThemeEnabled)
+            .putInt("accent_theme", accentThemeIndex)
             .putInt("routing_profile_mode", selectedRoutingProfileMode)
             .putBoolean("per_app_vol_en", perAppVolumeEnabled)
             .putInt("ambient_sens", ambientSensitivityPercent)
@@ -692,15 +877,16 @@ object AudioEngine {
         if (presetReverb == null) {
             runCatching { presetReverb = PresetReverb(0, 0).apply { enabled = effectsActive } }
         }
+        // שימוש ב-2 ערוצי עיבוד (Left=0, Right=1) לטובת שליטה מלאה באיזון L/R Stereo Balance
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && dynamicsProcessing == null) {
             runCatching {
                 val cfgBuilder = DynamicsProcessing.Config.Builder(
                     DynamicsProcessing.VARIANT_FAVOR_FREQUENCY_RESOLUTION,
-                    1,
-                    true, 10,
-                    true, 3,
-                    true, 10,
-                    true
+                    2,          // 2 Channels: Left (0) & Right (1)
+                    true, 10,   // 10-Band Pre-EQ
+                    true, 3,    // 3-Band Multi-Band Compressor
+                    true, 10,   // 10-Band Post-EQ
+                    true        // Master Limiter
                 )
                 dynamicsProcessing = DynamicsProcessing(0, 0, cfgBuilder.build()).apply {
                     enabled = effectsActive
@@ -774,6 +960,7 @@ object AudioEngine {
         if (!isBoosterActive) return
         val eq = equalizer
 
+        val batterySaverActive = autoBatterySaverDspEnabled && isLowBatteryDetected
         val qFactor = (0.4f + (parametricQFactorProgress / 10f)).coerceIn(0.4f, 4.4f)
         val routeProfile = getEffectiveOutputProfile()
 
@@ -809,7 +996,20 @@ object AudioEngine {
             }
         }
 
-        // מצב דיבור חכם והדגשת דיאלוגים (Vocal Clarity / Dialogue Enhancer)
+        // 1. פיצוי איבוד תדרים בווליום נמוך (Fletcher-Munson Loudness Contour)
+        if (loudnessContourEnabled && currentTotalVolume < 65) {
+            val lowVolRatio = ((65 - currentTotalVolume) / 65f).coerceIn(0f, 1f)
+            routeSubBassDb += 3.8f * lowVolRatio
+            routeAirTrebleDb += 2.6f * lowVolRatio
+        }
+
+        // 2. מצב מניעת עייפות שמיעה (Anti-Fatigue / Dark Warm Mode)
+        if (antiFatigueModeEnabled) {
+            routeAirTrebleDb -= 3.2f
+            routeVocalPresenceDb -= 1.0f
+            routeSubBassDb += 1.2f
+        }
+
         if (vocalDialogueModeEnabled) {
             val vRatio = vocalDialogueStrength / 100f
             routeSubBassDb -= 3.5f * vRatio
@@ -818,14 +1018,12 @@ object AudioEngine {
             routeAirTrebleDb += 1.5f * vRatio
         }
 
-        // כיול שמיעה אישי (Personalized Ear Calibration)
         if (personalCalibrationEnabled) {
             routeSubBassDb += personalEarOffsetsDb[0]
             routeVocalPresenceDb += personalEarOffsetsDb[1]
             routeAirTrebleDb += personalEarOffsetsDb[2]
         }
 
-        // מונו חכם לאוזניה בודדת (Mono Downmix): מאפס הפרדת Virtualizer מרחבית כדי למנוע אובדן ערוץ
         if (monoDownmixEnabled) {
             runCatching { virtualizer?.setStrength(0.toShort()) }
             routeVocalPresenceDb += 1.2f
@@ -835,48 +1033,66 @@ object AudioEngine {
             runCatching {
                 val dp = dynamicsProcessing
                 if (dp != null) {
-                    val cutoffFreqs = floatArrayOf(45f, 90f, 180f, 355f, 710f, 1400f, 2800f, 5600f, 11200f, 20000f)
-                    for (b in 0 until 10) {
-                        val userGainDb = parametricBandGainsDb[b]
-                        val profileOffset = when (b) {
-                            0, 1 -> routeSubBassDb
-                            2, 3 -> routeLowMidCutDb
-                            5, 6, 7 -> routeVocalPresenceDb
-                            8, 9 -> routeAirTrebleDb
-                            else -> 0f
+                    if (batterySaverActive) {
+                        dp.enabled = false
+                    } else {
+                        dp.enabled = true
+                        // שליטה באיזון ערוצים שמאל/ימין (L/R Stereo Balance) דרך InputGain של כל ערוץ
+                        val leftAttenuationDb = if (lrBalanceProgress > 100) {
+                            -((lrBalanceProgress - 100) / 100f) * 24f
+                        } else 0f
+                        val rightAttenuationDb = if (lrBalanceProgress < 100) {
+                            -((100 - lrBalanceProgress) / 100f) * 24f
+                        } else 0f
+
+                        runCatching {
+                            dp.setInputGainbyChannel(0, leftAttenuationDb)
+                            dp.setInputGainbyChannel(1, rightAttenuationDb)
                         }
-                        val qScaledGain = (userGainDb * (0.85f + (qFactor - 1.0f) * 0.12f)) + profileOffset
-                        val eqBand = DynamicsProcessing.EqBand(true, cutoffFreqs[b], qScaledGain.coerceIn(-15f, 15f))
-                        dp.setPreEqBandAllChannelsTo(b, eqBand)
+
+                        val cutoffFreqs = floatArrayOf(45f, 90f, 180f, 355f, 710f, 1400f, 2800f, 5600f, 11200f, 20000f)
+                        for (b in 0 until 10) {
+                            val userGainDb = parametricBandGainsDb[b]
+                            val profileOffset = when (b) {
+                                0, 1 -> routeSubBassDb
+                                2, 3 -> routeLowMidCutDb
+                                5, 6, 7 -> routeVocalPresenceDb
+                                8, 9 -> routeAirTrebleDb
+                                else -> 0f
+                            }
+                            val qScaledGain = (userGainDb * (0.85f + (qFactor - 1.0f) * 0.12f)) + profileOffset
+                            val eqBand = DynamicsProcessing.EqBand(true, cutoffFreqs[b], qScaledGain.coerceIn(-15f, 15f))
+                            dp.setPreEqBandAllChannelsTo(b, eqBand)
+                        }
+
+                        val mbEnabled = multiBandLimiterEnabled
+                        val lowThresh = -6f - (mbLowControl / 100f) * 18f
+                        val midThresh = -5f - (mbMidControl / 100f) * 14f
+                        val highThresh = -5f - (mbHighControl / 100f) * 16f
+
+                        val lowRatio = 2.0f + (mbLowControl / 100f) * 6.0f
+                        val midRatio = 1.8f + (mbMidControl / 100f) * 4.2f
+                        val highRatio = 2.0f + (mbHighControl / 100f) * 5.0f
+
+                        val mbcLow = DynamicsProcessing.MbcBand(
+                            mbEnabled, 220f, 5f, 80f, lowRatio, lowThresh, 3f, -45f, 1.5f, 0f, 1.2f
+                        )
+                        val mbcMid = DynamicsProcessing.MbcBand(
+                            mbEnabled, 3200f, 8f, 90f, midRatio, midThresh, 4f, -45f, 1.5f, 0f, 1.5f
+                        )
+                        val mbcHigh = DynamicsProcessing.MbcBand(
+                            mbEnabled, 20000f, 3f, 60f, highRatio, highThresh, 2.5f, -50f, 1.5f, 0f, 1.0f
+                        )
+                        dp.setMbcBandAllChannelsTo(0, mbcLow)
+                        dp.setMbcBandAllChannelsTo(1, mbcMid)
+                        dp.setMbcBandAllChannelsTo(2, mbcHigh)
+
+                        val limiter = DynamicsProcessing.Limiter(
+                            antiClippingEnabled || multiBandLimiterEnabled,
+                            true, 0, 2f, 45f, 10f, -1.2f, 0f
+                        )
+                        dp.setLimiterAllChannelsTo(limiter)
                     }
-
-                    val mbEnabled = multiBandLimiterEnabled
-                    val lowThresh = -6f - (mbLowControl / 100f) * 18f
-                    val midThresh = -5f - (mbMidControl / 100f) * 14f
-                    val highThresh = -5f - (mbHighControl / 100f) * 16f
-
-                    val lowRatio = 2.0f + (mbLowControl / 100f) * 6.0f
-                    val midRatio = 1.8f + (mbMidControl / 100f) * 4.2f
-                    val highRatio = 2.0f + (mbHighControl / 100f) * 5.0f
-
-                    val mbcLow = DynamicsProcessing.MbcBand(
-                        mbEnabled, 220f, 5f, 80f, lowRatio, lowThresh, 3f, -45f, 1.5f, 0f, 1.2f
-                    )
-                    val mbcMid = DynamicsProcessing.MbcBand(
-                        mbEnabled, 3200f, 8f, 90f, midRatio, midThresh, 4f, -45f, 1.5f, 0f, 1.5f
-                    )
-                    val mbcHigh = DynamicsProcessing.MbcBand(
-                        mbEnabled, 20000f, 3f, 60f, highRatio, highThresh, 2.5f, -50f, 1.5f, 0f, 1.0f
-                    )
-                    dp.setMbcBandAllChannelsTo(0, mbcLow)
-                    dp.setMbcBandAllChannelsTo(1, mbcMid)
-                    dp.setMbcBandAllChannelsTo(2, mbcHigh)
-
-                    val limiter = DynamicsProcessing.Limiter(
-                        antiClippingEnabled || multiBandLimiterEnabled,
-                        true, 0, 2f, 45f, 10f, -1.2f, 0f
-                    )
-                    dp.setLimiterAllChannelsTo(limiter)
                 }
             }
         }
@@ -1000,7 +1216,7 @@ object AudioEngine {
         runCatching { virtualizer?.enabled = enabled }
         runCatching { presetReverb?.enabled = enabled }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            runCatching { dynamicsProcessing?.enabled = enabled }
+            runCatching { dynamicsProcessing?.enabled = enabled && !(autoBatterySaverDspEnabled && isLowBatteryDetected) }
         }
     }
 
@@ -1011,7 +1227,14 @@ object AudioEngine {
         val maxAllowed = getEffectiveMaxVolume()
         currentTotalVolume = totalPercent.coerceIn(0, maxAllowed)
 
-        // משוב רטט חכם בחציית סף (100% / 200% / 300%)
+        if (activeStreamType == 0) {
+            if (isHeadphonesActive()) {
+                savedHeadphonesOnlyVolume = currentTotalVolume
+            } else {
+                savedSpeakerOnlyVolume = currentTotalVolume.coerceAtMost(110)
+            }
+        }
+
         if (currentTotalVolume != prevVol) {
             if ((prevVol < 100 && currentTotalVolume >= 100) ||
                 (prevVol > 100 && currentTotalVolume <= 100) ||
@@ -1043,7 +1266,11 @@ object AudioEngine {
 
             savedMediaBoostVolume = currentTotalVolume
             context.getSharedPreferences("sound_booster_hd", Context.MODE_PRIVATE)
-                .edit().putInt("saved_vol", currentTotalVolume).apply()
+                .edit()
+                .putInt("saved_vol", currentTotalVolume)
+                .putInt("saved_spk_only_vol", savedSpeakerOnlyVolume)
+                .putInt("saved_hp_only_vol", savedHeadphonesOnlyVolume)
+                .apply()
 
             val maxSysVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
             val curSys = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
@@ -1059,6 +1286,7 @@ object AudioEngine {
                 } else {
                     reapplyCurrentGainSafely()
                 }
+                updateSoundQualityDSP()
             } else {
                 if (curSys < maxSysVol || allowNativeUI) {
                     runCatching { audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, maxSysVol, flags) }
@@ -1075,13 +1303,15 @@ object AudioEngine {
 }
 
 // =========================================================================
-// 2. המסך הראשי של האפליקציה
+// 2. המסך הראשי של האפליקציה (7 קטגוריות מלאות)
 // =========================================================================
 class MainActivity : AppCompatActivity() {
 
     private lateinit var audioManager: AudioManager
     private var maxSystemVolume: Int = 15
 
+    private lateinit var rootMainLayout: LinearLayout
+    private lateinit var cardHeader: MaterialCardView
     private lateinit var seekTotalVolume: SeekBar
     private lateinit var progressTotalVolume: ProgressBar
     private lateinit var tvVolumeCardTitle: TextView
@@ -1091,17 +1321,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var switchEnable: SwitchCompat
     private lateinit var btnEnableSystemSlider: MaterialButton
     private val eqSliders = mutableListOf<SeekBar>()
+    private val categoryTabs = mutableListOf<MaterialButton>()
+    private var selectedCategoryTabIdx = 0
 
     private var isUpdatingControlsProgrammatically = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        runCatching {
-            window.statusBarColor = Color.parseColor("#0B0E14")
-            window.navigationBarColor = Color.parseColor("#0B0E14")
-        }
         setContentView(R.layout.activity_main)
 
+        rootMainLayout = findViewById(R.id.rootMainLayout)
+        cardHeader = findViewById(R.id.cardHeader)
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         maxSystemVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
 
@@ -1109,6 +1339,7 @@ class MainActivity : AppCompatActivity() {
 
         setupCategoryTabs()
         setupModernUI()
+        applyVisualThemeColors()
     }
 
     override fun onResume() {
@@ -1116,41 +1347,71 @@ class MainActivity : AppCompatActivity() {
         AudioEngine.updateBluetoothStatusOnly(this)
         updateServiceButtonState()
         syncVolumeRangeUI()
+        applyVisualThemeColors()
+    }
+
+    private fun applyVisualThemeColors() {
+        val bgColor = if (AudioEngine.amoledBlackThemeEnabled) Color.BLACK else Color.parseColor("#0B0E14")
+        val accent = AudioEngine.getPrimaryAccentColor()
+        rootMainLayout.setBackgroundColor(bgColor)
+        runCatching {
+            window.statusBarColor = bgColor
+            window.navigationBarColor = bgColor
+        }
+        cardHeader.strokeColor = if (AudioEngine.isBoosterActive) accent else Color.parseColor("#263042")
+        for (i in categoryTabs.indices) {
+            if (i == selectedCategoryTabIdx) {
+                categoryTabs[i].backgroundTintList = ColorStateList.valueOf(accent)
+                categoryTabs[i].setTextColor(Color.parseColor("#0B0E14"))
+            } else {
+                categoryTabs[i].backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
+                categoryTabs[i].setTextColor(Color.parseColor("#A0AAB8"))
+            }
+        }
+        VolumeOverlayService.instance?.showNativeBadgeIfNeeded()
     }
 
     private fun setupCategoryTabs() {
         val tabVolume = findViewById<MaterialButton>(R.id.tabBtnVolume)
         val tabQuality = findViewById<MaterialButton>(R.id.tabBtnQuality)
+        val tabHearing = findViewById<MaterialButton>(R.id.tabBtnHearing)
         val tabEffects = findViewById<MaterialButton>(R.id.tabBtnEffects)
         val tabEq = findViewById<MaterialButton>(R.id.tabBtnEq)
+        val tabAutomation = findViewById<MaterialButton>(R.id.tabBtnAutomation)
+        val tabSystem = findViewById<MaterialButton>(R.id.tabBtnSystem)
 
         val secVolume = findViewById<View>(R.id.sectionVolume)
         val secQuality = findViewById<View>(R.id.sectionQuality)
+        val secHearing = findViewById<View>(R.id.sectionHearing)
         val secEffects = findViewById<View>(R.id.sectionEffects)
         val secEq = findViewById<View>(R.id.sectionEq)
+        val secAutomation = findViewById<View>(R.id.sectionAutomation)
+        val secSystem = findViewById<View>(R.id.sectionSystem)
 
-        val tabs = listOf(tabVolume, tabQuality, tabEffects, tabEq)
-        val sections = listOf(secVolume, secQuality, secEffects, secEq)
+        categoryTabs.clear()
+        categoryTabs.addAll(listOf(tabVolume, tabQuality, tabHearing, tabEffects, tabEq, tabAutomation, tabSystem))
+        val sections = listOf(secVolume, secQuality, secHearing, secEffects, secEq, secAutomation, secSystem)
 
         fun selectTab(index: Int) {
+            selectedCategoryTabIdx = index
             HapticEngine.click(this)
-            for (i in tabs.indices) {
+            val accent = AudioEngine.getPrimaryAccentColor()
+            for (i in categoryTabs.indices) {
                 if (i == index) {
-                    tabs[i].backgroundTintList = ColorStateList.valueOf(Color.parseColor("#00E676"))
-                    tabs[i].setTextColor(Color.parseColor("#0B0E14"))
+                    categoryTabs[i].backgroundTintList = ColorStateList.valueOf(accent)
+                    categoryTabs[i].setTextColor(Color.parseColor("#0B0E14"))
                     sections[i].visibility = View.VISIBLE
                 } else {
-                    tabs[i].backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
-                    tabs[i].setTextColor(Color.parseColor("#A0AAB8"))
+                    categoryTabs[i].backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
+                    categoryTabs[i].setTextColor(Color.parseColor("#A0AAB8"))
                     sections[i].visibility = View.GONE
                 }
             }
         }
 
-        tabVolume.setOnClickListener { selectTab(0) }
-        tabQuality.setOnClickListener { selectTab(1) }
-        tabEffects.setOnClickListener { selectTab(2) }
-        tabEq.setOnClickListener { selectTab(3) }
+        for (i in categoryTabs.indices) {
+            categoryTabs[i].setOnClickListener { selectTab(i) }
+        }
     }
 
     private fun updateServiceButtonState() {
@@ -1211,7 +1472,6 @@ class MainActivity : AppCompatActivity() {
     private fun setupModernUI() {
         switchEnable = findViewById(R.id.switchEnable)
         val tvStatus = findViewById<TextView>(R.id.tvStatus)
-        val cardHeader = findViewById<MaterialCardView>(R.id.cardHeader)
         btnEnableSystemSlider = findViewById(R.id.btnEnableSystemSlider)
 
         tvVolumeCardTitle = findViewById(R.id.tvVolumeCardTitle)
@@ -1228,7 +1488,7 @@ class MainActivity : AppCompatActivity() {
         val switchMonoDownmix = findViewById<SwitchCompat>(R.id.switchMonoDownmix)
         val switchAlwaysShowMiniPill = findViewById<SwitchCompat>(R.id.switchAlwaysShowMiniPill)
 
-        // כפתורי Audio Output Routing Profiles
+        // Audio Output Routing Profiles
         tvActiveOutputProfileInfo = findViewById(R.id.tvActiveOutputProfileInfo)
         val btnRouteAuto = findViewById<MaterialButton>(R.id.btnRouteAuto)
         val btnRouteSpeaker = findViewById<MaterialButton>(R.id.btnRouteSpeaker)
@@ -1237,7 +1497,19 @@ class MainActivity : AppCompatActivity() {
         val btnRouteCar = findViewById<MaterialButton>(R.id.btnRouteCar)
         val routeBtns = listOf(btnRouteAuto, btnRouteSpeaker, btnRouteWired, btnRouteBluetooth, btnRouteCar)
 
-        // בקרי Per-App Volume Control
+        // קטגוריה 3: איזון ערוצים L/R, פיצוי ווליום נמוך, מניעת עייפות וכיול שמיעה
+        val tvLRBalanceValue = findViewById<TextView>(R.id.tvLRBalanceValue)
+        val seekLRBalance = findViewById<SeekBar>(R.id.seekLRBalance)
+        val btnResetLRBalance = findViewById<MaterialButton>(R.id.btnResetLRBalance)
+        val switchLoudnessContour = findViewById<SwitchCompat>(R.id.switchLoudnessContour)
+        val switchAntiFatigue = findViewById<SwitchCompat>(R.id.switchAntiFatigue)
+        val switchPersonalCalibration = findViewById<SwitchCompat>(R.id.switchPersonalCalibration)
+        val tvCalibrationStatus = findViewById<TextView>(R.id.tvCalibrationStatus)
+        val btnToneTestLow = findViewById<MaterialButton>(R.id.btnToneTestLow)
+        val btnToneTestMid = findViewById<MaterialButton>(R.id.btnToneTestMid)
+        val btnToneTestHigh = findViewById<MaterialButton>(R.id.btnToneTestHigh)
+
+        // קטגוריה 6: אוטומציה, Per-App, רעש סביבתי, הגנות ניתוק וטיימר שינה
         val switchPerAppVolume = findViewById<SwitchCompat>(R.id.switchPerAppVolume)
         val btnAppSlotYoutube = findViewById<MaterialButton>(R.id.btnAppSlotYoutube)
         val btnAppSlotSpotify = findViewById<MaterialButton>(R.id.btnAppSlotSpotify)
@@ -1249,13 +1521,14 @@ class MainActivity : AppCompatActivity() {
         val tvPerAppTargetValue = findViewById<TextView>(R.id.tvPerAppTargetValue)
         val seekPerAppTargetVol = findViewById<SeekBar>(R.id.seekPerAppTargetVol)
 
-        // בקרי Ambient Noise Auto-Boost
         val switchAmbientNoiseBoost = findViewById<SwitchCompat>(R.id.switchAmbientNoiseBoost)
         val tvAmbientNoiseInfo = findViewById<TextView>(R.id.tvAmbientNoiseInfo)
         val seekAmbientSensitivity = findViewById<SeekBar>(R.id.seekAmbientSensitivity)
         val tvAmbientSensitivityVal = findViewById<TextView>(R.id.tvAmbientSensitivityVal)
 
-        // כפתורי Sleep Timer with Fade-Out
+        val switchAutoRestoreUnplug = findViewById<SwitchCompat>(R.id.switchAutoRestoreUnplug)
+        val switchBtRangeGuard = findViewById<SwitchCompat>(R.id.switchBtRangeGuard)
+
         val tvSleepTimerCountdown = findViewById<TextView>(R.id.tvSleepTimerCountdown)
         val btnSleepOff = findViewById<MaterialButton>(R.id.btnSleepOff)
         val btnSleep15 = findViewById<MaterialButton>(R.id.btnSleep15)
@@ -1263,6 +1536,20 @@ class MainActivity : AppCompatActivity() {
         val btnSleep60 = findViewById<MaterialButton>(R.id.btnSleep60)
         val sleepBtns = listOf(btnSleepOff to 0, btnSleep15 to 15, btnSleep30 to 30, btnSleep60 to 60)
 
+        // קטגוריה 7: מערכת, סוללה, AMOLED, מיני-EQ צף וגיבוי JSON
+        val switchBatterySaverDsp = findViewById<SwitchCompat>(R.id.switchBatterySaverDsp)
+        val tvBatterySaverStatus = findViewById<TextView>(R.id.tvBatterySaverStatus)
+        val switchAmoledBlack = findViewById<SwitchCompat>(R.id.switchAmoledBlack)
+        val btnThemeNeonGreen = findViewById<MaterialButton>(R.id.btnThemeNeonGreen)
+        val btnThemeCyberCyan = findViewById<MaterialButton>(R.id.btnThemeCyberCyan)
+        val btnThemeStudioGold = findViewById<MaterialButton>(R.id.btnThemeStudioGold)
+        val btnThemeUltraPurple = findViewById<MaterialButton>(R.id.btnThemeUltraPurple)
+        val themeBtns = listOf(btnThemeNeonGreen, btnThemeCyberCyan, btnThemeStudioGold, btnThemeUltraPurple)
+        val btnOpenFloatingMiniEq = findViewById<MaterialButton>(R.id.btnOpenFloatingMiniEq)
+        val btnExportJsonConfig = findViewById<MaterialButton>(R.id.btnExportJsonConfig)
+        val btnImportJsonConfig = findViewById<MaterialButton>(R.id.btnImportJsonConfig)
+
+        // קטגוריה 2: איכות ו-AI
         val switchAiEngine = findViewById<SwitchCompat>(R.id.switchAiSongEngine)
         val tvAiSubStatus = findViewById<TextView>(R.id.tvAiEngineSubStatus)
         val btnAiAuto = findViewById<MaterialButton>(R.id.btnAiModeAuto)
@@ -1273,17 +1560,10 @@ class MainActivity : AppCompatActivity() {
         val seekAiIntensity = findViewById<SeekBar>(R.id.seekAiIntensity)
         val tvAiIntensityVal = findViewById<TextView>(R.id.tvAiIntensityValue)
 
-        // בקרי מצב דיבור חכם (Dialogue Clarity) וכיול שמיעה אישי (Personal Ear Calibration)
         val switchVocalDialogueMode = findViewById<SwitchCompat>(R.id.switchVocalDialogueMode)
         val seekVocalDialogueStrength = findViewById<SeekBar>(R.id.seekVocalDialogueStrength)
         val tvVocalDialogueVal = findViewById<TextView>(R.id.tvVocalDialogueVal)
-        val switchPersonalCalibration = findViewById<SwitchCompat>(R.id.switchPersonalCalibration)
-        val tvCalibrationStatus = findViewById<TextView>(R.id.tvCalibrationStatus)
-        val btnToneTestLow = findViewById<MaterialButton>(R.id.btnToneTestLow)
-        val btnToneTestMid = findViewById<MaterialButton>(R.id.btnToneTestMid)
-        val btnToneTestHigh = findViewById<MaterialButton>(R.id.btnToneTestHigh)
 
-        // בקרי Multi-Band Dynamic Limiter
         val switchMultiBandLimiter = findViewById<SwitchCompat>(R.id.switchMultiBandLimiter)
         val seekMbLow = findViewById<SeekBar>(R.id.seekMbLow)
         val tvMbLowVal = findViewById<TextView>(R.id.tvMbLowVal)
@@ -1307,6 +1587,7 @@ class MainActivity : AppCompatActivity() {
         val seekSongPunch = findViewById<SeekBar>(R.id.seekSongPunch)
         val tvSongPunchVal = findViewById<TextView>(R.id.tvSongPunchValue)
 
+        // קטגוריה 4 ו-5: אפקטים ואקולייזר
         val seekBass = findViewById<SeekBar>(R.id.seekBass)
         val tvBassValue = findViewById<TextView>(R.id.tvBassValue)
         val seekVirtualizer = findViewById<SeekBar>(R.id.seekVirtualizer)
@@ -1333,6 +1614,7 @@ class MainActivity : AppCompatActivity() {
 
         fun refreshHeaderStatusText() {
             val btStatus = if (AudioEngine.isBluetoothConnected) " | BT מחובר" else ""
+            val batTag = if (AudioEngine.autoBatterySaverDspEnabled && AudioEngine.isLowBatteryDetected) " | חיסכון סוללה" else ""
             when {
                 !AudioEngine.isBoosterActive -> {
                     tvStatus.text = "מנוע סאונד כבוי ●$btStatus"
@@ -1340,16 +1622,170 @@ class MainActivity : AppCompatActivity() {
                     cardHeader.strokeColor = Color.parseColor("#263042")
                 }
                 AudioEngine.aiSongEngineEnabled -> {
-                    tvStatus.text = "מנוע AI Neural Mastering פעיל ● שדרוג שירים חי$btStatus"
-                    tvStatus.setTextColor(Color.parseColor("#00E676"))
-                    cardHeader.strokeColor = Color.parseColor("#00E676")
+                    tvStatus.text = "מנוע AI Neural Mastering פעיל ● שדרוג שירים חי$btStatus$batTag"
+                    tvStatus.setTextColor(AudioEngine.getPrimaryAccentColor())
+                    cardHeader.strokeColor = AudioEngine.getPrimaryAccentColor()
                 }
                 else -> {
-                    tvStatus.text = "מנוע DSP HD פעיל ● מוגן מהתנגשויות שמע$btStatus"
+                    tvStatus.text = "מנוע DSP HD פעיל ● מוגן מהתנגשויות שמע$btStatus$batTag"
                     tvStatus.setTextColor(Color.parseColor("#00E5FF"))
                     cardHeader.strokeColor = Color.parseColor("#00E5FF")
                 }
             }
+        }
+
+        // חיבור בקרי קטגוריה 3: איזון ערוצים L/R, פיצוי ווליום נמוך ומניעת עייפות
+        fun updateLRBalanceLabel(prog: Int) {
+            val leftPct = if (prog <= 100) 100 else (200 - prog).coerceIn(0, 100)
+            val rightPct = if (prog >= 100) 100 else prog.coerceIn(0, 100)
+            tvLRBalanceValue.text = when {
+                prog == 100 -> "מאוזן במרכז (L: 100% | R: 100%)"
+                prog < 100 -> "נטייה לשמאל (L: $leftPct% | R: $rightPct%)"
+                else -> "נטייה לימין (L: $leftPct% | R: $rightPct%)"
+            }
+        }
+
+        seekLRBalance.progress = AudioEngine.lrBalanceProgress
+        updateLRBalanceLabel(AudioEngine.lrBalanceProgress)
+
+        seekLRBalance.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                updateLRBalanceLabel(p)
+                if (fromUser) {
+                    HapticEngine.tick(this@MainActivity)
+                    AudioEngine.lrBalanceProgress = p
+                    AudioEngine.saveEngineModes(this@MainActivity)
+                    AudioEngine.updateSoundQualityDSP()
+                }
+            }
+            override fun onStartTrackingTouch(s: SeekBar?) {}
+            override fun onStopTrackingTouch(s: SeekBar?) {}
+        })
+
+        btnResetLRBalance.setOnClickListener {
+            HapticEngine.click(this)
+            AudioEngine.lrBalanceProgress = 100
+            seekLRBalance.progress = 100
+            updateLRBalanceLabel(100)
+            AudioEngine.saveEngineModes(this)
+            AudioEngine.updateSoundQualityDSP()
+        }
+
+        switchLoudnessContour.isChecked = AudioEngine.loudnessContourEnabled
+        switchLoudnessContour.setOnCheckedChangeListener { _, isChecked ->
+            HapticEngine.click(this)
+            AudioEngine.loudnessContourEnabled = isChecked
+            AudioEngine.saveEngineModes(this)
+            AudioEngine.updateSoundQualityDSP()
+        }
+
+        switchAntiFatigue.isChecked = AudioEngine.antiFatigueModeEnabled
+        switchAntiFatigue.setOnCheckedChangeListener { _, isChecked ->
+            HapticEngine.click(this)
+            AudioEngine.antiFatigueModeEnabled = isChecked
+            AudioEngine.saveEngineModes(this)
+            AudioEngine.updateSoundQualityDSP()
+        }
+
+        // חיבור בקרי קטגוריה 6: הגנות ניתוק אוזניות ובלוטות'
+        switchAutoRestoreUnplug.isChecked = AudioEngine.autoRestoreSpeakerOnUnplug
+        switchAutoRestoreUnplug.setOnCheckedChangeListener { _, isChecked ->
+            HapticEngine.click(this)
+            AudioEngine.autoRestoreSpeakerOnUnplug = isChecked
+            AudioEngine.saveEngineModes(this)
+        }
+
+        switchBtRangeGuard.isChecked = AudioEngine.btRangeDropGuardEnabled
+        switchBtRangeGuard.setOnCheckedChangeListener { _, isChecked ->
+            HapticEngine.click(this)
+            AudioEngine.btRangeDropGuardEnabled = isChecked
+            AudioEngine.saveEngineModes(this)
+        }
+
+        // חיבור בקרי קטגוריה 7: סוללה, AMOLED, צבעי הדגש, Mini-EQ צף וגיבוי JSON
+        switchBatterySaverDsp.isChecked = AudioEngine.autoBatterySaverDspEnabled
+        switchBatterySaverDsp.setOnCheckedChangeListener { _, isChecked ->
+            HapticEngine.click(this)
+            AudioEngine.autoBatterySaverDspEnabled = isChecked
+            AudioEngine.checkBatteryLevelState(this)
+            AudioEngine.saveEngineModes(this)
+            AudioEngine.updateSoundQualityDSP()
+            refreshHeaderStatusText()
+        }
+
+        switchAmoledBlack.isChecked = AudioEngine.amoledBlackThemeEnabled
+        switchAmoledBlack.setOnCheckedChangeListener { _, isChecked ->
+            HapticEngine.click(this)
+            AudioEngine.amoledBlackThemeEnabled = isChecked
+            AudioEngine.saveEngineModes(this)
+            applyVisualThemeColors()
+        }
+
+        for (tIdx in themeBtns.indices) {
+            themeBtns[tIdx].setOnClickListener {
+                HapticEngine.click(this)
+                AudioEngine.accentThemeIndex = tIdx
+                AudioEngine.saveEngineModes(this)
+                applyVisualThemeColors()
+                refreshHeaderStatusText()
+            }
+        }
+
+        btnOpenFloatingMiniEq.setOnClickListener {
+            HapticEngine.click(this)
+            val svc = VolumeOverlayService.instance
+            if (svc != null) {
+                svc.toggleFloatingMiniEqPopup()
+            } else {
+                Toast.makeText(this, "הפעל תחילה את שירות המחוון בהגדרות הנגישות", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        btnExportJsonConfig.setOnClickListener {
+            HapticEngine.click(this)
+            val json = AudioEngine.exportConfigurationToJson()
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            cm?.setPrimaryClip(ClipData.newPlainText("SoundBooster_Config", json))
+            AlertDialog.Builder(this)
+                .setTitle("גיבוי JSON הועתק ללוח!")
+                .setMessage(json)
+                .setPositiveButton("שתף גיבוי") { _, _ ->
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, json)
+                    }
+                    startActivity(Intent.createChooser(shareIntent, "שתף גיבוי הגדרות Sound Booster"))
+                }
+                .setNegativeButton("סגור", null)
+                .show()
+        }
+
+        btnImportJsonConfig.setOnClickListener {
+            HapticEngine.click(this)
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            val clipTxt = cm?.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
+            val inputEdit = EditText(this).apply {
+                setText(clipTxt)
+                hint = "הדבק כאן טקסט גיבוי JSON..."
+                setTextColor(Color.WHITE)
+                setHintTextColor(Color.GRAY)
+                setPadding(36, 28, 36, 28)
+            }
+            AlertDialog.Builder(this)
+                .setTitle("שחזור הגדרות מגיבוי JSON")
+                .setView(inputEdit)
+                .setPositiveButton("שחזר והחל כעת") { _, _ ->
+                    val ok = AudioEngine.importConfigurationFromJson(this, inputEdit.text.toString())
+                    if (ok) {
+                        HapticEngine.heavyMilestone(this)
+                        recreate()
+                        Toast.makeText(this, "כל ההגדרות שוחזרו בהצלחה!", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this, "קובץ ה-JSON אינו תקין", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                .setNegativeButton("ביטול", null)
+                .show()
         }
 
         // חיבור מתגי רטט, מונו חכם ובועית צפה נגררת
@@ -1376,7 +1812,6 @@ class MainActivity : AppCompatActivity() {
             VolumeOverlayService.instance?.showNativeBadgeIfNeeded()
         }
 
-        // סנכרון כפתורי Audio Output Routing Profiles
         fun updateRoutingProfileButtonsUI() {
             for (i in routeBtns.indices) {
                 val active = (i == AudioEngine.selectedRoutingProfileMode)
@@ -1403,7 +1838,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // סנכרון Per-App Volume Control
         fun updatePerAppSlotUI() {
             val slot = AudioEngine.selectedAppSlotIndex.coerceIn(0, 4)
             for (i in appSlotBtns.indices) {
@@ -1453,7 +1887,6 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(s: SeekBar?) {}
         })
 
-        // חיבור Ambient Noise Auto-Boost
         seekAmbientSensitivity.progress = AudioEngine.ambientSensitivityPercent
         tvAmbientSensitivityVal.text = "${AudioEngine.ambientSensitivityPercent}%"
         switchAmbientNoiseBoost.isChecked = AudioEngine.ambientNoiseBoostEnabled
@@ -1490,7 +1923,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // סנכרון כפתורי Sleep Timer with Fade-Out
         fun updateSleepTimerButtonsUI(selectedMin: Int) {
             for ((btn, mins) in sleepBtns) {
                 val active = (mins == selectedMin)
@@ -1601,7 +2033,6 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(s: SeekBar?) {}
         })
 
-        // חיבור מצב דיבור חכם (Dialogue Clarity) וכיול שמיעה אישי (Personal Ear Calibration)
         switchVocalDialogueMode.isChecked = AudioEngine.vocalDialogueModeEnabled
         seekVocalDialogueStrength.progress = AudioEngine.vocalDialogueStrength
         tvVocalDialogueVal.text = "${AudioEngine.vocalDialogueStrength}%"
@@ -1654,7 +2085,6 @@ class MainActivity : AppCompatActivity() {
         btnToneTestMid.setOnClickListener { runToneCalibrationStep(1, 1000, "אמצע 1kHz") }
         btnToneTestHigh.setOnClickListener { runToneCalibrationStep(2, 4000, "גבוהים 4kHz") }
 
-        // חיבור Multi-Band Dynamic Limiter
         switchMultiBandLimiter.isChecked = AudioEngine.multiBandLimiterEnabled
         seekMbLow.progress = AudioEngine.mbLowControl
         tvMbLowVal.text = "${AudioEngine.mbLowControl}%"
@@ -1761,7 +2191,7 @@ class MainActivity : AppCompatActivity() {
                     progress > 220 -> Color.parseColor("#FF1744")
                     progress > 160 -> Color.parseColor("#FF9100")
                     progress > 100 -> Color.parseColor("#FFD740")
-                    else -> Color.parseColor("#00E676")
+                    else -> AudioEngine.getPrimaryAccentColor()
                 }
                 tvTotalVolume.setTextColor(color)
                 progressTotalVolume.progressTintList = ColorStateList.valueOf(color)
@@ -1930,7 +2360,6 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(s: SeekBar?) {}
         })
 
-        // בניית אקולייזר פרמטרי מורחב 10 ערוצים + Q-Factor
         seekParametricQ.progress = AudioEngine.parametricQFactorProgress
         val initQ = String.format("%.1f", 0.4f + (AudioEngine.parametricQFactorProgress / 10f))
         tvParametricQValue.text = "Q: $initQ"
@@ -2074,7 +2503,7 @@ class MainActivity : AppCompatActivity() {
 }
 
 // =========================================================================
-// 3. שירות הגברת עוצמת הקול דרך מחוון המערכת + בועית HD נגררת + זיהוי Per-App
+// 3. שירות הגברת עוצמת הקול דרך מחוון המערכת + בועית HD נגררת + חלון Mini-EQ צף
 // =========================================================================
 class VolumeOverlayService : AccessibilityService() {
 
@@ -2088,10 +2517,13 @@ class VolumeOverlayService : AccessibilityService() {
 
     private var badgeView: TextView? = null
     private var badgeParams: WindowManager.LayoutParams? = null
+    private var miniEqPopupView: View? = null
+
     private var dragInitialX = 0
     private var dragInitialY = 0
     private var dragTouchStartX = 0f
     private var dragTouchStartY = 0f
+    private var lastBadgeTapTime = 0L
 
     private val hideHandler = Handler(Looper.getMainLooper())
     private val hideRunnable = Runnable {
@@ -2226,6 +2658,125 @@ class VolumeOverlayService : AccessibilityService() {
         return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, resources.displayMetrics).roundToInt()
     }
 
+    // חלון מיני-אקולייזר צף מהיר (Bubble Mini-EQ Overlay) מעל אפליקציות
+    fun toggleFloatingMiniEqPopup() {
+        val wm = windowManager ?: return
+        if (miniEqPopupView != null) {
+            removeFloatingMiniEqPopup()
+            return
+        }
+
+        val accent = AudioEngine.getPrimaryAccentColor()
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18f), dp(16f), dp(18f), dp(16f))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#F2121722"))
+                cornerRadius = dp(22f).toFloat()
+                setStroke(dp(2f), accent)
+            }
+        }
+
+        val title = TextView(this).apply {
+            text = "⚡ MINI-EQ & BOOST (${AudioEngine.currentTotalVolume}%)"
+            setTextColor(accent)
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, dp(10f))
+        }
+        container.addView(title)
+
+        // מחוון ווליום מהיר בחלון הצף
+        val seekQuickVol = SeekBar(this).apply {
+            max = AudioEngine.getEffectiveMaxVolume()
+            progress = AudioEngine.currentTotalVolume
+            progressTintList = ColorStateList.valueOf(accent)
+            thumbTintList = ColorStateList.valueOf(accent)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                    if (fromUser) {
+                        HapticEngine.tick(this@VolumeOverlayService)
+                        AudioEngine.applyVolume(this@VolumeOverlayService, p, showNativeSystemUI = false)
+                        title.text = "⚡ MINI-EQ & BOOST ($p%)"
+                        showNativeBadgeIfNeeded()
+                    }
+                }
+                override fun onStartTrackingTouch(s: SeekBar?) {}
+                override fun onStopTrackingTouch(s: SeekBar?) {}
+            })
+        }
+        container.addView(seekQuickVol)
+
+        val modesRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(10f), 0, dp(6f))
+        }
+
+        val quickProfiles = listOf("AI Auto" to 0, "Bass+" to 1, "Vocal" to 2, "3D Live" to 3)
+        for ((lbl, modeIdx) in quickProfiles) {
+            val btn = TextView(this).apply {
+                text = lbl
+                textSize = 11f
+                gravity = Gravity.CENTER
+                setPadding(dp(10f), dp(8f), dp(10f), dp(8f))
+                setTextColor(if (AudioEngine.aiPresetMode == modeIdx) Color.parseColor("#0B0E14") else Color.WHITE)
+                background = GradientDrawable().apply {
+                    setColor(if (AudioEngine.aiPresetMode == modeIdx) accent else Color.parseColor("#263042"))
+                    cornerRadius = dp(12f).toFloat()
+                }
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    marginEnd = dp(4f)
+                }
+                setOnClickListener {
+                    HapticEngine.click(this@VolumeOverlayService)
+                    AudioEngine.aiPresetMode = modeIdx
+                    AudioEngine.aiSongEngineEnabled = true
+                    AudioEngine.saveEngineModes(this@VolumeOverlayService)
+                    AudioEngine.updateSoundQualityDSP()
+                    removeFloatingMiniEqPopup()
+                    toggleFloatingMiniEqPopup()
+                }
+            }
+            modesRow.addView(btn)
+        }
+        container.addView(modesRow)
+
+        val closeBtn = TextView(this).apply {
+            text = "✕ סגור חלון צף"
+            textSize = 12f
+            gravity = Gravity.CENTER
+            setTextColor(Color.parseColor("#FF5252"))
+            setPadding(0, dp(8f), 0, 0)
+            setOnClickListener {
+                HapticEngine.click(this@VolumeOverlayService)
+                removeFloatingMiniEqPopup()
+            }
+        }
+        container.addView(closeBtn)
+
+        val params = WindowManager.LayoutParams(
+            dp(290f),
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.CENTER
+        }
+
+        miniEqPopupView = container
+        runCatching { wm.addView(miniEqPopupView, params) }
+    }
+
+    private fun removeFloatingMiniEqPopup() {
+        miniEqPopupView?.let {
+            runCatching { windowManager?.removeView(it) }
+            miniEqPopupView = null
+        }
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     fun showNativeBadgeIfNeeded() {
         hideHandler.removeCallbacks(hideRunnable)
@@ -2234,6 +2785,7 @@ class VolumeOverlayService : AccessibilityService() {
             return
         }
         val wm = windowManager ?: return
+        val accent = AudioEngine.getPrimaryAccentColor()
 
         if (badgeView == null) {
             val params = WindowManager.LayoutParams(
@@ -2254,7 +2806,7 @@ class VolumeOverlayService : AccessibilityService() {
             badgeView = TextView(this).apply {
                 gravity = Gravity.CENTER
                 elevation = dp(8f).toFloat()
-                // תמיכה בגרירה חופשית של בועית ה-HD לכל מקום במסך + לחיצה להחלפת ערוץ!
+                // גרירה חופשית + לחיצה להחלפת ערוץ + לחיצה כפולה לפתיחת Mini-EQ צף!
                 setOnTouchListener { v, ev ->
                     val lp = badgeParams ?: return@setOnTouchListener false
                     when (ev.actionMasked) {
@@ -2279,14 +2831,21 @@ class VolumeOverlayService : AccessibilityService() {
                         MotionEvent.ACTION_UP -> {
                             val movedDist = abs(ev.rawX - dragTouchStartX) + abs(ev.rawY - dragTouchStartY)
                             if (movedDist < dp(10f)) {
-                                HapticEngine.click(this@VolumeOverlayService)
-                                AudioEngine.cycleNextStream(this@VolumeOverlayService)
-                                showNativeBadgeIfNeeded()
-                                Toast.makeText(
-                                    this@VolumeOverlayService,
-                                    "ערוץ פעיל: ${AudioEngine.getActiveStreamHebrewLabel()}",
-                                    Toast.LENGTH_SHORT
-                                ).show()
+                                val now = SystemClock.elapsedRealtime()
+                                if (now - lastBadgeTapTime < 360L) {
+                                    HapticEngine.heavyMilestone(this@VolumeOverlayService)
+                                    toggleFloatingMiniEqPopup()
+                                } else {
+                                    HapticEngine.click(this@VolumeOverlayService)
+                                    AudioEngine.cycleNextStream(this@VolumeOverlayService)
+                                    showNativeBadgeIfNeeded()
+                                    Toast.makeText(
+                                        this@VolumeOverlayService,
+                                        "ערוץ: ${AudioEngine.getActiveStreamHebrewLabel()} (לחיצה כפולה = Mini-EQ)",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                                lastBadgeTapTime = now
                             } else {
                                 HapticEngine.tick(this@VolumeOverlayService)
                                 AudioEngine.saveEngineModes(this@VolumeOverlayService)
@@ -2312,11 +2871,11 @@ class VolumeOverlayService : AccessibilityService() {
             setPadding(padH, padV, padH, padV)
             textSize = 13f
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#161B26"))
+                setColor(if (AudioEngine.amoledBlackThemeEnabled) Color.BLACK else Color.parseColor("#161B26"))
                 cornerRadius = dp(24f).toFloat()
-                setStroke(dp(2f), Color.parseColor("#00E676"))
+                setStroke(dp(2f), accent)
             }
-            setTextColor(Color.parseColor("#00E676"))
+            setTextColor(accent)
             text = "${AudioEngine.currentTotalVolume}% HD$btMark$safeGuardMark$dlgMark"
         }
         if (!AudioEngine.alwaysShowDraggableMiniPill) {
@@ -2339,6 +2898,7 @@ class VolumeOverlayService : AccessibilityService() {
                 if (cls.contains("Screenshot", ignoreCase = true) || cls.contains("GlobalActions", ignoreCase = true)) {
                     cancelVolumeHold()
                     removeBadge()
+                    removeFloatingMiniEqPopup()
                 }
             } else if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
                 AudioEngine.onForegroundAppDetected(this, pkg)
@@ -2353,6 +2913,7 @@ class VolumeOverlayService : AccessibilityService() {
         volumeKeyHandler.removeCallbacksAndMessages(null)
         hideHandler.removeCallbacksAndMessages(null)
         removeBadge()
+        removeFloatingMiniEqPopup()
         instance = null
     }
 }
