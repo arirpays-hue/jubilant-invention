@@ -1,15 +1,24 @@
 package com.example.soundbooster
 
+import android.Manifest
 import android.accessibilityservice.AccessibilityService
+import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
+import android.media.AudioAttributes
 import android.media.AudioDeviceInfo
+import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioPlaybackConfiguration
+import android.media.AudioRecord
+import android.media.AudioTrack
+import android.media.MediaRecorder
 import android.media.audiofx.BassBoost
 import android.media.audiofx.DynamicsProcessing
 import android.media.audiofx.Equalizer
@@ -22,10 +31,15 @@ import android.os.CountDownTimer
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.provider.Settings
+import android.service.quicksettings.Tile
+import android.service.quicksettings.TileService
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
@@ -36,14 +50,136 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
+import kotlin.concurrent.thread
+import kotlin.math.abs
+import kotlin.math.log10
 import kotlin.math.roundToInt
+import kotlin.math.sin
+import kotlin.math.sqrt
+
+// =========================================================================
+// 0. מנוע משוב רטט חכם (Tactile Haptic Feedback Engine)
+// =========================================================================
+object HapticEngine {
+    private var lastTickTime = 0L
+
+    private fun getVibrator(context: Context): Vibrator? {
+        return context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+    }
+
+    // רטט עדין וקצר לגרירת מחוונים (מוגבל בתדירות כדי לא להעמיס על המנוע)
+    fun tick(context: Context) {
+        if (!AudioEngine.hapticFeedbackEnabled) return
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastTickTime < 42L) return
+        lastTickTime = now
+        runCatching {
+            val vib = getVibrator(context) ?: return
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                vib.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK))
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vib.vibrate(VibrationEffect.createOneShot(10L, 65))
+            } else {
+                @Suppress("DEPRECATION")
+                vib.vibrate(10L)
+            }
+        }
+    }
+
+    // רטט קליק ברור ללחיצה על כפתורים, לשוניות ומתגים
+    fun click(context: Context) {
+        if (!AudioEngine.hapticFeedbackEnabled) return
+        runCatching {
+            val vib = getVibrator(context) ?: return
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                vib.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vib.vibrate(VibrationEffect.createOneShot(18L, 120))
+            } else {
+                @Suppress("DEPRECATION")
+                vib.vibrate(18L)
+            }
+        }
+    }
+
+    // רטט מודגש בחציית סף חשוב (100% / 200% / 300%)
+    fun heavyMilestone(context: Context) {
+        if (!AudioEngine.hapticFeedbackEnabled) return
+        runCatching {
+            val vib = getVibrator(context) ?: return
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                vib.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK))
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vib.vibrate(VibrationEffect.createOneShot(35L, 220))
+            } else {
+                @Suppress("DEPRECATION")
+                vib.vibrate(35L)
+            }
+        }
+    }
+}
+
+// =========================================================================
+// 0.1 מחולל תדרי בדיקת שמיעה (Personalized Sound Calibration Generator)
+// =========================================================================
+object ToneCalibrationEngine {
+    @Volatile private var isPlayingTone = false
+
+    fun playCalibrationTone(freqHz: Int, durationMs: Int = 950, onComplete: () -> Unit) {
+        if (isPlayingTone) return
+        isPlayingTone = true
+        thread(start = true) {
+            runCatching {
+                val sampleRate = 44100
+                val numSamples = (durationMs * sampleRate) / 1000
+                val samples = ShortArray(numSamples)
+                for (i in 0 until numSamples) {
+                    val angle = 2.0 * Math.PI * i * freqHz / sampleRate
+                    // מעטפת Fade-In ו-Fade-Out למניעת קליק בתחילת/סוף הצליל
+                    val env = when {
+                        i < 1500 -> i / 1500.0
+                        i > numSamples - 1500 -> (numSamples - i) / 1500.0
+                        else -> 1.0
+                    }
+                    samples[i] = (sin(angle) * 14000 * env).toInt().toShort()
+                }
+                val bufferSize = samples.size * 2
+                val track = AudioTrack.Builder()
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .build()
+                    )
+                    .setAudioFormat(
+                        AudioFormat.Builder()
+                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                            .setSampleRate(sampleRate)
+                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                            .build()
+                    )
+                    .setBufferSizeInBytes(bufferSize)
+                    .setTransferMode(AudioTrack.MODE_STATIC)
+                    .build()
+
+                track.write(samples, 0, samples.size)
+                track.play()
+                Thread.sleep(durationMs.toLong() + 60L)
+                track.stop()
+                track.release()
+            }
+            isPlayingTone = false
+            Handler(Looper.getMainLooper()).post { onComplete() }
+        }
+    }
+}
 
 // =========================================================================
 // 1. מנוע סאונד והגברה דרך מחוון המערכת המקורי של המכשיר (Native SystemUI)
-//    + Audio Output Routing Profiles + Multi-Band Dynamic Limiter
-//    + 10-Band Parametric Equalizer + Hearing Safe Guard + Sleep Timer Fade-Out
 // =========================================================================
 object AudioEngine {
     var loudnessEnhancer: LoudnessEnhancer? = null
@@ -58,16 +194,41 @@ object AudioEngine {
     var isBoosterActive: Boolean = true
     var allow300PercentBoost: Boolean = false
 
-    // מתג הגנת שמיעה חכמה באוזניות (Hearing Safe Guard)
+    // הגנת שמיעה, רטט, מונו חכם ובועית צפה נגררת
     var hearingSafeGuardEnabled: Boolean = false
     const val HEARING_SAFE_MAX_VOLUME = 120
+    var hapticFeedbackEnabled: Boolean = true
+    var monoDownmixEnabled: Boolean = false
+    var alwaysShowDraggableMiniPill: Boolean = false
+    var pillPosX: Int = 16
+    var pillPosY: Int = -155
 
     // פרופילי ניתוב שמע (Audio Output Routing Profiles):
     // 0 = Auto Detect, 1 = Phone Speaker, 2 = Wired Headphones, 3 = Bluetooth Audio, 4 = Car Audio
     var selectedRoutingProfileMode: Int = 0
-    var detectedHardwareRoute: Int = 1 // 1=Speaker, 2=Wired, 3=Bluetooth
+    var detectedHardwareRoute: Int = 1
     var isBluetoothConnected: Boolean = false
     var isWiredHeadsetConnected: Boolean = false
+
+    // עוצמה עצמאית לכל אפליקציה (Per-App Volume Control):
+    // 0 = YouTube, 1 = Spotify/Music, 2 = TikTok/Social, 3 = Games, 4 = WhatsApp/Voice
+    var perAppVolumeEnabled: Boolean = true
+    var selectedAppSlotIndex: Int = 0
+    val perAppVolumes = intArrayOf(140, 155, 125, 165, 135)
+    var currentDetectedAppCategory: Int = -1
+    var lastDetectedPackageName: String = ""
+
+    // זיהוי סביבה רועשת (Ambient Noise Auto-Boost)
+    var ambientNoiseBoostEnabled: Boolean = false
+    var ambientSensitivityPercent: Int = 60
+    var currentAmbientAutoBonusGainMb: Int = 0
+    private var ambientMonitorRunning = false
+
+    // מצב דיבור חכם (Dialogue Clarity) + כיול שמיעה אישי (Personal Ear Calibration)
+    var vocalDialogueModeEnabled: Boolean = false
+    var vocalDialogueStrength: Int = 70
+    var personalCalibrationEnabled: Boolean = true
+    val personalEarOffsetsDb = floatArrayOf(1.5f, 1.0f, 2.2f) // פיצוי רגישות נמוכים / אמצע / גבוהים
 
     // 0 = מדיה, 1 = עוצמת צלצול, 2 = התראות, 3 = שעון מעורר, 4 = שיחת טלפון
     var activeStreamType: Int = 0
@@ -78,7 +239,7 @@ object AudioEngine {
     var clarityLevel: Int = 50
     var warmthLevel: Int = 40
 
-    // Multi-Band Dynamic Limiter (שליטה נפרדת ב-3 תחומי תדרים: באס, ווקאל, גבוהים)
+    // Multi-Band Dynamic Limiter
     var multiBandLimiterEnabled: Boolean = true
     var mbLowControl: Int = 75
     var mbMidControl: Int = 65
@@ -86,8 +247,8 @@ object AudioEngine {
 
     // אקולייזר פרמטרי מורחב 10 ערוצים (31Hz..16kHz) + Q-Factor
     val parametricFreqsHz = intArrayOf(31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000)
-    val parametricBandGainsDb = FloatArray(10) { 0f } // -15dB עד +15dB
-    var parametricQFactorProgress: Int = 12 // מייצג Q = 1.2
+    val parametricBandGainsDb = FloatArray(10) { 0f }
+    var parametricQFactorProgress: Int = 12
 
     // מנוע ה-AI המוכן לשיפור שירים לאיכות גבוהה במיוחד
     var aiSongEngineEnabled: Boolean = true
@@ -106,11 +267,20 @@ object AudioEngine {
     var sleepRemainingSeconds: Long = 0L
     private var fadeOutStartVolume: Int = 100
     var onSleepTimerTickCallback: ((Long, Int) -> Unit)? = null
+    var onAmbientNoiseUpdateCallback: ((Int, Int) -> Unit)? = null
 
     @Volatile var isInternalVolumeChange: Boolean = false
     var bootCooldownUntil: Long = 0L
     private var playbackCallbackRegistered = false
     private var isInitializedOnce = false
+
+    val appCategoryNames = listOf(
+        "YouTube",
+        "Spotify / Music",
+        "TikTok / Reels",
+        "משחקים (Games)",
+        "WhatsApp / פודקאסט"
+    )
 
     fun isHeadphonesActive(): Boolean {
         val effectiveProfile = getEffectiveOutputProfile()
@@ -250,7 +420,117 @@ object AudioEngine {
         currentTotalVolume = ((curSys.toFloat() / maxSys) * 100f).roundToInt().coerceIn(0, 100)
     }
 
-    // הפעלת טיימר שינה חכם עם הנמכה הדרגתית (Fade-Out) בדקה האחרונה
+    // זיהוי אפליקציה פעילה והחלת ווליום ייעודי (Per-App Volume Control)
+    fun onForegroundAppDetected(context: Context, packageName: String) {
+        if (!perAppVolumeEnabled || !isBoosterActive || activeStreamType != 0) return
+        val pkg = packageName.lowercase()
+        if (pkg == lastDetectedPackageName ||
+            pkg.contains("soundbooster") ||
+            pkg.contains("systemui") ||
+            pkg.contains("launcher") ||
+            pkg.contains("inputmethod") ||
+            pkg.contains("keyboard")
+        ) {
+            return
+        }
+        lastDetectedPackageName = pkg
+
+        val matchedCategory = when {
+            pkg.contains("youtube") || pkg.contains("vanced") || pkg.contains("newpipe") -> 0
+            pkg.contains("spotify") || pkg.contains("music") || pkg.contains("deezer") || pkg.contains("soundcloud") -> 1
+            pkg.contains("tiktok") || pkg.contains("musically") || pkg.contains("instagram") || pkg.contains("facebook") -> 2
+            pkg.contains("game") || pkg.contains("pubg") || pkg.contains("brawl") || pkg.contains("roblox") || pkg.contains("cod") -> 3
+            pkg.contains("whatsapp") || pkg.contains("telegram") || pkg.contains("podcast") || pkg.contains("audible") -> 4
+            else -> -1
+        }
+
+        if (matchedCategory != -1 && matchedCategory != currentDetectedAppCategory) {
+            currentDetectedAppCategory = matchedCategory
+            val targetVol = perAppVolumes[matchedCategory].coerceIn(0, getEffectiveMaxVolume())
+            if (targetVol != currentTotalVolume) {
+                applyVolume(context, targetVol, showNativeSystemUI = false)
+                VolumeOverlayService.instance?.showNativeBadgeIfNeeded()
+            }
+        }
+    }
+
+    // ניטור רעש סביבתי (Ambient Noise Auto-Boost)
+    @SuppressLint("MissingPermission")
+    fun setAmbientNoiseMonitor(context: Context, enable: Boolean) {
+        ambientNoiseBoostEnabled = enable
+        if (!enable) {
+            ambientMonitorRunning = false
+            currentAmbientAutoBonusGainMb = 0
+            reapplyCurrentGainSafely()
+            onAmbientNoiseUpdateCallback?.invoke(0, 0)
+            return
+        }
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            ambientNoiseBoostEnabled = false
+            return
+        }
+        if (ambientMonitorRunning) return
+        ambientMonitorRunning = true
+
+        thread(start = true) {
+            val sampleRate = 8000
+            val minBuf = AudioRecord.getMinBufferSize(
+                sampleRate,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT
+            ).coerceAtLeast(1024)
+
+            val recorder = runCatching {
+                AudioRecord(
+                    MediaRecorder.AudioSource.MIC,
+                    sampleRate,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                    minBuf
+                )
+            }.getOrNull()
+
+            if (recorder == null || recorder.state != AudioRecord.STATE_INITIALIZED) {
+                ambientMonitorRunning = false
+                return@thread
+            }
+
+            runCatching { recorder.startRecording() }
+            val buf = ShortArray(minBuf / 2)
+
+            while (ambientMonitorRunning && ambientNoiseBoostEnabled) {
+                val read = recorder.read(buf, 0, buf.size)
+                if (read > 0) {
+                    var sumSq = 0.0
+                    for (i in 0 until read) {
+                        val s = buf[i].toDouble()
+                        sumSq += s * s
+                    }
+                    val rms = sqrt(sumSq / read).coerceAtLeast(1.0)
+                    val approxDb = (20.0 * log10(rms)).toInt().coerceIn(25, 95)
+
+                    // מעל 52dB נחשב סביבה רועשת (אוטובוס/רחוב) -> מוסיף פיצוי הגברה אוטומטי
+                    val noiseExcess = (approxDb - 52).coerceAtLeast(0)
+                    val sensFactor = ambientSensitivityPercent / 100f
+                    currentAmbientAutoBonusGainMb = (noiseExcess * 18f * sensFactor).roundToInt().coerceIn(0, 750)
+                    val bonusPct = (currentAmbientAutoBonusGainMb / 17f).roundToInt()
+
+                    reapplyCurrentGainSafely()
+                    Handler(Looper.getMainLooper()).post {
+                        onAmbientNoiseUpdateCallback?.invoke(approxDb, bonusPct)
+                    }
+                }
+                Thread.sleep(900L)
+            }
+
+            runCatching {
+                recorder.stop()
+                recorder.release()
+            }
+            currentAmbientAutoBonusGainMb = 0
+        }
+    }
+
     fun startSleepTimer(context: Context, minutes: Int) {
         sleepCountDownTimer?.cancel()
         sleepTimerMinutesSelected = minutes
@@ -267,7 +547,6 @@ object AudioEngine {
         sleepCountDownTimer = object : CountDownTimer(totalMillis, 1000L) {
             override fun onTick(millisUntilFinished: Long) {
                 sleepRemainingSeconds = millisUntilFinished / 1000L
-                // בדקה האחרונה (60 שניות אחרונות) מבצע Fade-Out חלק ורציף עד 0%
                 if (sleepRemainingSeconds in 1..60) {
                     if (sleepRemainingSeconds == 60L) {
                         fadeOutStartVolume = currentTotalVolume.coerceAtLeast(10)
@@ -294,7 +573,25 @@ object AudioEngine {
             val prefs = it.getSharedPreferences("sound_booster_hd", Context.MODE_PRIVATE)
             allow300PercentBoost = prefs.getBoolean("allow_300_boost", allow300PercentBoost)
             hearingSafeGuardEnabled = prefs.getBoolean("hearing_safe_guard", hearingSafeGuardEnabled)
+            hapticFeedbackEnabled = prefs.getBoolean("haptic_en", hapticFeedbackEnabled)
+            monoDownmixEnabled = prefs.getBoolean("mono_downmix_en", monoDownmixEnabled)
+            alwaysShowDraggableMiniPill = prefs.getBoolean("always_mini_pill", alwaysShowDraggableMiniPill)
+            pillPosX = prefs.getInt("pill_pos_x", pillPosX)
+            pillPosY = prefs.getInt("pill_pos_y", pillPosY)
+
             selectedRoutingProfileMode = prefs.getInt("routing_profile_mode", selectedRoutingProfileMode)
+            perAppVolumeEnabled = prefs.getBoolean("per_app_vol_en", perAppVolumeEnabled)
+            for (i in 0..4) {
+                perAppVolumes[i] = prefs.getInt("per_app_v_$i", perAppVolumes[i])
+            }
+
+            ambientSensitivityPercent = prefs.getInt("ambient_sens", ambientSensitivityPercent)
+            vocalDialogueModeEnabled = prefs.getBoolean("vocal_dialogue_en", vocalDialogueModeEnabled)
+            vocalDialogueStrength = prefs.getInt("vocal_dialogue_str", vocalDialogueStrength)
+            personalCalibrationEnabled = prefs.getBoolean("personal_cal_en", personalCalibrationEnabled)
+            for (i in 0..2) {
+                personalEarOffsetsDb[i] = prefs.getFloat("ear_cal_$i", personalEarOffsetsDb[i])
+            }
 
             multiBandLimiterEnabled = prefs.getBoolean("mb_limiter_en", multiBandLimiterEnabled)
             mbLowControl = prefs.getInt("mb_low", mbLowControl)
@@ -342,7 +639,17 @@ object AudioEngine {
         val editor = context.getSharedPreferences("sound_booster_hd", Context.MODE_PRIVATE).edit()
             .putBoolean("allow_300_boost", allow300PercentBoost)
             .putBoolean("hearing_safe_guard", hearingSafeGuardEnabled)
+            .putBoolean("haptic_en", hapticFeedbackEnabled)
+            .putBoolean("mono_downmix_en", monoDownmixEnabled)
+            .putBoolean("always_mini_pill", alwaysShowDraggableMiniPill)
+            .putInt("pill_pos_x", pillPosX)
+            .putInt("pill_pos_y", pillPosY)
             .putInt("routing_profile_mode", selectedRoutingProfileMode)
+            .putBoolean("per_app_vol_en", perAppVolumeEnabled)
+            .putInt("ambient_sens", ambientSensitivityPercent)
+            .putBoolean("vocal_dialogue_en", vocalDialogueModeEnabled)
+            .putInt("vocal_dialogue_str", vocalDialogueStrength)
+            .putBoolean("personal_cal_en", personalCalibrationEnabled)
             .putBoolean("mb_limiter_en", multiBandLimiterEnabled)
             .putInt("mb_low", mbLowControl)
             .putInt("mb_mid", mbMidControl)
@@ -356,6 +663,12 @@ object AudioEngine {
             .putInt("song_sep", songSeparationLevel)
             .putInt("song_punch", songPunchLevel)
 
+        for (i in 0..4) {
+            editor.putInt("per_app_v_$i", perAppVolumes[i])
+        }
+        for (i in 0..2) {
+            editor.putFloat("ear_cal_$i", personalEarOffsetsDb[i])
+        }
         for (b in 0 until 10) {
             editor.putFloat("param_eq_b_$b", parametricBandGainsDb[b])
         }
@@ -379,16 +692,15 @@ object AudioEngine {
         if (presetReverb == null) {
             runCatching { presetReverb = PresetReverb(0, 0).apply { enabled = effectsActive } }
         }
-        // יצירת מנוע DynamicsProcessing ל-10 ערוצי EQ פרמטריים + Multi-Band Dynamic Limiter (API 28+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && dynamicsProcessing == null) {
             runCatching {
                 val cfgBuilder = DynamicsProcessing.Config.Builder(
                     DynamicsProcessing.VARIANT_FAVOR_FREQUENCY_RESOLUTION,
                     1,
-                    true, 10,   // 10-Band Pre-EQ
-                    true, 3,    // 3-Band Multi-Band Compressor (Low / Mid / High)
-                    true, 10,   // 10-Band Post-EQ
-                    true        // Master Limiter
+                    true, 10,
+                    true, 3,
+                    true, 10,
+                    true
                 )
                 dynamicsProcessing = DynamicsProcessing(0, 0, cfgBuilder.build()).apply {
                     enabled = effectsActive
@@ -433,20 +745,19 @@ object AudioEngine {
             currentTotalVolume = maxAllowed
         }
         val mediaVol = if (activeStreamType == 0) currentTotalVolume else savedMediaBoostVolume.coerceAtMost(maxAllowed)
-        if (mediaVol <= 100) {
+        if (mediaVol <= 100 && currentAmbientAutoBonusGainMb <= 0) {
             runCatching { loudnessEnhancer?.setTargetGain(0) }
             return
         }
         val extra = (mediaVol - 100).coerceAtLeast(0)
 
-        // התאמת דרגת ההגברה לפי פרופיל הניתוב (רמקול מובנה מוגן יותר מעיוות, רכב/אוזניות פתוחים יותר)
         val profileMultiplier = when (getEffectiveOutputProfile()) {
-            1 -> 0.88f // Speaker safe headroom
-            4 -> 1.08f // Car audio clean line boost
+            1 -> 0.88f
+            4 -> 1.08f
             else -> 1.0f
         }
         val factor = if (antiClippingEnabled) 17 else 24
-        val cleanGain = (extra * factor * profileMultiplier).roundToInt()
+        val cleanGain = (extra * factor * profileMultiplier).roundToInt() + currentAmbientAutoBonusGainMb
 
         runCatching {
             loudnessEnhancer?.enabled = true
@@ -466,32 +777,31 @@ object AudioEngine {
         val qFactor = (0.4f + (parametricQFactorProgress / 10f)).coerceIn(0.4f, 4.4f)
         val routeProfile = getEffectiveOutputProfile()
 
-        // חישוב תוספות תדרים לפי פרופיל הניתוב (Audio Output Routing Profile)
         var routeSubBassDb = 0f
         var routeLowMidCutDb = 0f
         var routeVocalPresenceDb = 0f
         var routeAirTrebleDb = 0f
 
         when (routeProfile) {
-            1 -> { // רמקול מובנה: חיתוך תדרי צרידות והגנה על הממברנה הקטנה
+            1 -> {
                 routeSubBassDb = -1.5f
                 routeLowMidCutDb = -1.2f
                 routeVocalPresenceDb = 2.2f
                 routeAirTrebleDb = 1.8f
             }
-            2 -> { // אוזניות חוטיות: באס עמוק ומדויק + הפרדה גבוהה
+            2 -> {
                 routeSubBassDb = 2.8f
                 routeLowMidCutDb = -0.8f
                 routeVocalPresenceDb = 1.5f
                 routeAirTrebleDb = 2.5f
             }
-            3 -> { // אוזניות בלוטות': פיצוי דחיסת A2DP בתדרים הגבוהים והנמוכים
+            3 -> {
                 routeSubBassDb = 2.4f
                 routeLowMidCutDb = -1.0f
                 routeVocalPresenceDb = 1.8f
                 routeAirTrebleDb = 3.0f
             }
-            4 -> { // מערכת שמע ברכב: הדגשת סאב-וופר ובמה רחבה
+            4 -> {
                 routeSubBassDb = 4.0f
                 routeLowMidCutDb = -1.5f
                 routeVocalPresenceDb = 2.0f
@@ -499,7 +809,28 @@ object AudioEngine {
             }
         }
 
-        // עדכון Multi-Band Dynamic Limiter + 10-Band Parametric EQ ב-DynamicsProcessing (API 28+)
+        // מצב דיבור חכם והדגשת דיאלוגים (Vocal Clarity / Dialogue Enhancer)
+        if (vocalDialogueModeEnabled) {
+            val vRatio = vocalDialogueStrength / 100f
+            routeSubBassDb -= 3.5f * vRatio
+            routeLowMidCutDb -= 2.5f * vRatio
+            routeVocalPresenceDb += 5.2f * vRatio
+            routeAirTrebleDb += 1.5f * vRatio
+        }
+
+        // כיול שמיעה אישי (Personalized Ear Calibration)
+        if (personalCalibrationEnabled) {
+            routeSubBassDb += personalEarOffsetsDb[0]
+            routeVocalPresenceDb += personalEarOffsetsDb[1]
+            routeAirTrebleDb += personalEarOffsetsDb[2]
+        }
+
+        // מונו חכם לאוזניה בודדת (Mono Downmix): מאפס הפרדת Virtualizer מרחבית כדי למנוע אובדן ערוץ
+        if (monoDownmixEnabled) {
+            runCatching { virtualizer?.setStrength(0.toShort()) }
+            routeVocalPresenceDb += 1.2f
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             runCatching {
                 val dp = dynamicsProcessing
@@ -514,13 +845,11 @@ object AudioEngine {
                             8, 9 -> routeAirTrebleDb
                             else -> 0f
                         }
-                        // חידוד ה-Gain בהתאם ל-Q-Factor הפרמטרי שנבחר
                         val qScaledGain = (userGainDb * (0.85f + (qFactor - 1.0f) * 0.12f)) + profileOffset
                         val eqBand = DynamicsProcessing.EqBand(true, cutoffFreqs[b], qScaledGain.coerceIn(-15f, 15f))
                         dp.setPreEqBandAllChannelsTo(b, eqBand)
                     }
 
-                    // כיוון Multi-Band Dynamic Limiter (3 ערוצי דחיסה: נמוכים, אמצע, גבוהים)
                     val mbEnabled = multiBandLimiterEnabled
                     val lowThresh = -6f - (mbLowControl / 100f) * 18f
                     val midThresh = -5f - (mbMidControl / 100f) * 14f
@@ -552,7 +881,6 @@ object AudioEngine {
             }
         }
 
-        // סנכרון מלא גם מול ה-Equalizer החומרתי של המכשיר
         if (eq != null) {
             runCatching {
                 val bands = eq.numberOfBands.toInt()
@@ -591,7 +919,9 @@ object AudioEngine {
                             airHighGain += aiPower * (maxEQ * 0.45f)
 
                             runCatching { bassBoost?.setStrength((aiPower * 680 * highVolProtection).toInt().toShort()) }
-                            runCatching { virtualizer?.setStrength((aiPower * 720).toInt().toShort()) }
+                            if (!monoDownmixEnabled) {
+                                runCatching { virtualizer?.setStrength((aiPower * 720).toInt().toShort()) }
+                            }
                             runCatching { presetReverb?.preset = 1.toShort() }
                         }
                         1 -> {
@@ -601,7 +931,9 @@ object AudioEngine {
                             airHighGain += aiPower * (maxEQ * 0.32f)
 
                             runCatching { bassBoost?.setStrength((aiPower * 920 * highVolProtection).toInt().toShort()) }
-                            runCatching { virtualizer?.setStrength((aiPower * 550).toInt().toShort()) }
+                            if (!monoDownmixEnabled) {
+                                runCatching { virtualizer?.setStrength((aiPower * 550).toInt().toShort()) }
+                            }
                             runCatching { presetReverb?.preset = 0.toShort() }
                         }
                         2 -> {
@@ -612,7 +944,9 @@ object AudioEngine {
                             airHighGain += aiPower * (maxEQ * 0.55f)
 
                             runCatching { bassBoost?.setStrength((aiPower * 350).toInt().toShort()) }
-                            runCatching { virtualizer?.setStrength((aiPower * 680).toInt().toShort()) }
+                            if (!monoDownmixEnabled) {
+                                runCatching { virtualizer?.setStrength((aiPower * 680).toInt().toShort()) }
+                            }
                             runCatching { presetReverb?.preset = 1.toShort() }
                         }
                         else -> {
@@ -622,13 +956,14 @@ object AudioEngine {
                             airHighGain += aiPower * (maxEQ * 0.50f)
 
                             runCatching { bassBoost?.setStrength((aiPower * 740 * highVolProtection).toInt().toShort()) }
-                            runCatching { virtualizer?.setStrength((aiPower * 980).toInt().toShort()) }
+                            if (!monoDownmixEnabled) {
+                                runCatching { virtualizer?.setStrength((aiPower * 980).toInt().toShort()) }
+                            }
                             runCatching { presetReverb?.preset = 4.toShort() }
                         }
                     }
                 }
 
-                // התאמת ריסון רב-תדרי (Multi-Band Limiter) בעוצמות גבוהות
                 if (multiBandLimiterEnabled && currentTotalVolume > 120) {
                     val overRatio = ((currentTotalVolume - 120) / 180f).coerceIn(0f, 1f)
                     lowBandGain *= (1f - (mbLowControl / 100f) * 0.35f * overRatio)
@@ -672,8 +1007,20 @@ object AudioEngine {
     fun applyVolume(context: Context, totalPercent: Int, showNativeSystemUI: Boolean = false) {
         ensureAudioEffectsCreated()
         updateBluetoothStatusOnly(context)
+        val prevVol = currentTotalVolume
         val maxAllowed = getEffectiveMaxVolume()
         currentTotalVolume = totalPercent.coerceIn(0, maxAllowed)
+
+        // משוב רטט חכם בחציית סף (100% / 200% / 300%)
+        if (currentTotalVolume != prevVol) {
+            if ((prevVol < 100 && currentTotalVolume >= 100) ||
+                (prevVol > 100 && currentTotalVolume <= 100) ||
+                currentTotalVolume == 200 ||
+                currentTotalVolume == 300
+            ) {
+                HapticEngine.heavyMilestone(context)
+            }
+        }
 
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
         val now = SystemClock.elapsedRealtime()
@@ -707,7 +1054,11 @@ object AudioEngine {
                 if (curSys != sysTarget || allowNativeUI) {
                     runCatching { audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, sysTarget, flags) }
                 }
-                runCatching { loudnessEnhancer?.setTargetGain(0) }
+                if (currentAmbientAutoBonusGainMb <= 0) {
+                    runCatching { loudnessEnhancer?.setTargetGain(0) }
+                } else {
+                    reapplyCurrentGainSafely()
+                }
             } else {
                 if (curSys < maxSysVol || allowNativeUI) {
                     runCatching { audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, maxSysVol, flags) }
@@ -782,6 +1133,7 @@ class MainActivity : AppCompatActivity() {
         val sections = listOf(secVolume, secQuality, secEffects, secEq)
 
         fun selectTab(index: Int) {
+            HapticEngine.click(this)
             for (i in tabs.indices) {
                 if (i == index) {
                     tabs[i].backgroundTintList = ColorStateList.valueOf(Color.parseColor("#00E676"))
@@ -872,6 +1224,9 @@ class MainActivity : AppCompatActivity() {
         val switchAllow300 = findViewById<SwitchCompat>(R.id.switchAllow300Boost)
         val switchHearingSafeGuard = findViewById<SwitchCompat>(R.id.switchHearingSafeGuard)
         tvHearingGuardSub = findViewById(R.id.tvHearingGuardSub)
+        val switchHapticFeedback = findViewById<SwitchCompat>(R.id.switchHapticFeedback)
+        val switchMonoDownmix = findViewById<SwitchCompat>(R.id.switchMonoDownmix)
+        val switchAlwaysShowMiniPill = findViewById<SwitchCompat>(R.id.switchAlwaysShowMiniPill)
 
         // כפתורי Audio Output Routing Profiles
         tvActiveOutputProfileInfo = findViewById(R.id.tvActiveOutputProfileInfo)
@@ -881,6 +1236,24 @@ class MainActivity : AppCompatActivity() {
         val btnRouteBluetooth = findViewById<MaterialButton>(R.id.btnRouteBluetooth)
         val btnRouteCar = findViewById<MaterialButton>(R.id.btnRouteCar)
         val routeBtns = listOf(btnRouteAuto, btnRouteSpeaker, btnRouteWired, btnRouteBluetooth, btnRouteCar)
+
+        // בקרי Per-App Volume Control
+        val switchPerAppVolume = findViewById<SwitchCompat>(R.id.switchPerAppVolume)
+        val btnAppSlotYoutube = findViewById<MaterialButton>(R.id.btnAppSlotYoutube)
+        val btnAppSlotSpotify = findViewById<MaterialButton>(R.id.btnAppSlotSpotify)
+        val btnAppSlotSocial = findViewById<MaterialButton>(R.id.btnAppSlotSocial)
+        val btnAppSlotGaming = findViewById<MaterialButton>(R.id.btnAppSlotGaming)
+        val btnAppSlotVoice = findViewById<MaterialButton>(R.id.btnAppSlotVoice)
+        val appSlotBtns = listOf(btnAppSlotYoutube, btnAppSlotSpotify, btnAppSlotSocial, btnAppSlotGaming, btnAppSlotVoice)
+        val tvPerAppTargetLabel = findViewById<TextView>(R.id.tvPerAppTargetLabel)
+        val tvPerAppTargetValue = findViewById<TextView>(R.id.tvPerAppTargetValue)
+        val seekPerAppTargetVol = findViewById<SeekBar>(R.id.seekPerAppTargetVol)
+
+        // בקרי Ambient Noise Auto-Boost
+        val switchAmbientNoiseBoost = findViewById<SwitchCompat>(R.id.switchAmbientNoiseBoost)
+        val tvAmbientNoiseInfo = findViewById<TextView>(R.id.tvAmbientNoiseInfo)
+        val seekAmbientSensitivity = findViewById<SeekBar>(R.id.seekAmbientSensitivity)
+        val tvAmbientSensitivityVal = findViewById<TextView>(R.id.tvAmbientSensitivityVal)
 
         // כפתורי Sleep Timer with Fade-Out
         val tvSleepTimerCountdown = findViewById<TextView>(R.id.tvSleepTimerCountdown)
@@ -899,6 +1272,16 @@ class MainActivity : AppCompatActivity() {
         val aiModeBtns = listOf(btnAiAuto, btnAiBass, btnAiVocal, btnAiConcert)
         val seekAiIntensity = findViewById<SeekBar>(R.id.seekAiIntensity)
         val tvAiIntensityVal = findViewById<TextView>(R.id.tvAiIntensityValue)
+
+        // בקרי מצב דיבור חכם (Dialogue Clarity) וכיול שמיעה אישי (Personal Ear Calibration)
+        val switchVocalDialogueMode = findViewById<SwitchCompat>(R.id.switchVocalDialogueMode)
+        val seekVocalDialogueStrength = findViewById<SeekBar>(R.id.seekVocalDialogueStrength)
+        val tvVocalDialogueVal = findViewById<TextView>(R.id.tvVocalDialogueVal)
+        val switchPersonalCalibration = findViewById<SwitchCompat>(R.id.switchPersonalCalibration)
+        val tvCalibrationStatus = findViewById<TextView>(R.id.tvCalibrationStatus)
+        val btnToneTestLow = findViewById<MaterialButton>(R.id.btnToneTestLow)
+        val btnToneTestMid = findViewById<MaterialButton>(R.id.btnToneTestMid)
+        val btnToneTestHigh = findViewById<MaterialButton>(R.id.btnToneTestHigh)
 
         // בקרי Multi-Band Dynamic Limiter
         val switchMultiBandLimiter = findViewById<SwitchCompat>(R.id.switchMultiBandLimiter)
@@ -931,18 +1314,19 @@ class MainActivity : AppCompatActivity() {
         val seekReverb = findViewById<SeekBar>(R.id.seekReverb)
         val tvReverbValue = findViewById<TextView>(R.id.tvReverbValue)
 
-        // אקולייזר פרמטרי מורחב 10 ערוצים + Q-Factor
         val seekParametricQ = findViewById<SeekBar>(R.id.seekParametricQ)
         val tvParametricQValue = findViewById<TextView>(R.id.tvParametricQValue)
         val eqContainer = findViewById<LinearLayout>(R.id.eqContainer)
 
         tvVolumeCardTitle.setOnClickListener {
+            HapticEngine.click(this)
             AudioEngine.cycleNextStream(this)
             syncVolumeRangeUI()
             Toast.makeText(this, "ערוץ נבחר: ${AudioEngine.getActiveStreamHebrewLabel()} (לחץ שוב להחלפה)", Toast.LENGTH_SHORT).show()
         }
 
         btnEnableSystemSlider.setOnClickListener {
+            HapticEngine.click(this)
             Toast.makeText(this, "הפעל את 'Sound Booster מחוון ווליום 200%'", Toast.LENGTH_LONG).show()
             runCatching { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
         }
@@ -968,6 +1352,30 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // חיבור מתגי רטט, מונו חכם ובועית צפה נגררת
+        switchHapticFeedback.isChecked = AudioEngine.hapticFeedbackEnabled
+        switchHapticFeedback.setOnCheckedChangeListener { _, isChecked ->
+            AudioEngine.hapticFeedbackEnabled = isChecked
+            if (isChecked) HapticEngine.click(this)
+            AudioEngine.saveEngineModes(this)
+        }
+
+        switchMonoDownmix.isChecked = AudioEngine.monoDownmixEnabled
+        switchMonoDownmix.setOnCheckedChangeListener { _, isChecked ->
+            HapticEngine.click(this)
+            AudioEngine.monoDownmixEnabled = isChecked
+            AudioEngine.saveEngineModes(this)
+            AudioEngine.updateSoundQualityDSP()
+        }
+
+        switchAlwaysShowMiniPill.isChecked = AudioEngine.alwaysShowDraggableMiniPill
+        switchAlwaysShowMiniPill.setOnCheckedChangeListener { _, isChecked ->
+            HapticEngine.click(this)
+            AudioEngine.alwaysShowDraggableMiniPill = isChecked
+            AudioEngine.saveEngineModes(this)
+            VolumeOverlayService.instance?.showNativeBadgeIfNeeded()
+        }
+
         // סנכרון כפתורי Audio Output Routing Profiles
         fun updateRoutingProfileButtonsUI() {
             for (i in routeBtns.indices) {
@@ -985,12 +1393,100 @@ class MainActivity : AppCompatActivity() {
         updateRoutingProfileButtonsUI()
         for (rIdx in routeBtns.indices) {
             routeBtns[rIdx].setOnClickListener {
+                HapticEngine.click(this)
                 AudioEngine.selectedRoutingProfileMode = rIdx
                 AudioEngine.saveEngineModes(this)
                 AudioEngine.updateSoundQualityDSP()
                 AudioEngine.applyVolume(this, AudioEngine.currentTotalVolume, false)
                 updateRoutingProfileButtonsUI()
                 syncVolumeRangeUI()
+            }
+        }
+
+        // סנכרון Per-App Volume Control
+        fun updatePerAppSlotUI() {
+            val slot = AudioEngine.selectedAppSlotIndex.coerceIn(0, 4)
+            for (i in appSlotBtns.indices) {
+                val active = (i == slot)
+                appSlotBtns[i].strokeColor = ColorStateList.valueOf(
+                    if (active) Color.parseColor("#00E676") else Color.parseColor("#3A465E")
+                )
+                appSlotBtns[i].setTextColor(
+                    if (active) Color.parseColor("#00E676") else Color.parseColor("#A0AAB8")
+                )
+            }
+            val appName = AudioEngine.appCategoryNames[slot]
+            val savedVol = AudioEngine.perAppVolumes[slot]
+            tvPerAppTargetLabel.text = "עוצמה ייעודית עבור $appName:"
+            tvPerAppTargetValue.text = "$savedVol%"
+            seekPerAppTargetVol.progress = savedVol
+        }
+
+        switchPerAppVolume.isChecked = AudioEngine.perAppVolumeEnabled
+        updatePerAppSlotUI()
+
+        switchPerAppVolume.setOnCheckedChangeListener { _, isChecked ->
+            HapticEngine.click(this)
+            AudioEngine.perAppVolumeEnabled = isChecked
+            AudioEngine.saveEngineModes(this)
+        }
+
+        for (slotIdx in appSlotBtns.indices) {
+            appSlotBtns[slotIdx].setOnClickListener {
+                HapticEngine.click(this)
+                AudioEngine.selectedAppSlotIndex = slotIdx
+                updatePerAppSlotUI()
+            }
+        }
+
+        seekPerAppTargetVol.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                tvPerAppTargetValue.text = "$p%"
+                if (fromUser) {
+                    HapticEngine.tick(this@MainActivity)
+                    val slot = AudioEngine.selectedAppSlotIndex.coerceIn(0, 4)
+                    AudioEngine.perAppVolumes[slot] = p
+                    AudioEngine.saveEngineModes(this@MainActivity)
+                }
+            }
+            override fun onStartTrackingTouch(s: SeekBar?) {}
+            override fun onStopTrackingTouch(s: SeekBar?) {}
+        })
+
+        // חיבור Ambient Noise Auto-Boost
+        seekAmbientSensitivity.progress = AudioEngine.ambientSensitivityPercent
+        tvAmbientSensitivityVal.text = "${AudioEngine.ambientSensitivityPercent}%"
+        switchAmbientNoiseBoost.isChecked = AudioEngine.ambientNoiseBoostEnabled
+
+        switchAmbientNoiseBoost.setOnCheckedChangeListener { _, isChecked ->
+            HapticEngine.click(this)
+            if (isChecked && ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 202)
+                switchAmbientNoiseBoost.isChecked = false
+                return@setOnCheckedChangeListener
+            }
+            AudioEngine.setAmbientNoiseMonitor(this, isChecked)
+            if (!isChecked) {
+                tvAmbientNoiseInfo.text = "דוגם את עוצמת הרעש בסביבה ומגביר דינמית את השמע ברחוב או באוטובוס"
+            }
+        }
+
+        seekAmbientSensitivity.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                tvAmbientSensitivityVal.text = "$p%"
+                if (fromUser) {
+                    HapticEngine.tick(this@MainActivity)
+                    AudioEngine.ambientSensitivityPercent = p
+                    AudioEngine.saveEngineModes(this@MainActivity)
+                }
+            }
+            override fun onStartTrackingTouch(s: SeekBar?) {}
+            override fun onStopTrackingTouch(s: SeekBar?) {}
+        })
+
+        AudioEngine.onAmbientNoiseUpdateCallback = { dbLevel, bonusPct ->
+            if (AudioEngine.ambientNoiseBoostEnabled) {
+                tvAmbientNoiseInfo.text = "רעש סביבה חי: ~${dbLevel} dB | תוספת הגברה אוטומטית: +${bonusPct}%"
             }
         }
 
@@ -1009,6 +1505,7 @@ class MainActivity : AppCompatActivity() {
 
         for ((btn, mins) in sleepBtns) {
             btn.setOnClickListener {
+                HapticEngine.click(this)
                 AudioEngine.startSleepTimer(this, mins)
                 updateSleepTimerButtonsUI(mins)
                 if (mins == 0) {
@@ -1068,6 +1565,7 @@ class MainActivity : AppCompatActivity() {
         updateAiButtonsUI()
 
         switchAiEngine.setOnCheckedChangeListener { _, isChecked ->
+            HapticEngine.click(this)
             AudioEngine.aiSongEngineEnabled = isChecked
             AudioEngine.saveEngineModes(this)
             AudioEngine.updateSoundQualityDSP()
@@ -1077,6 +1575,7 @@ class MainActivity : AppCompatActivity() {
 
         for (modeIdx in aiModeBtns.indices) {
             aiModeBtns[modeIdx].setOnClickListener {
+                HapticEngine.click(this)
                 AudioEngine.aiPresetMode = modeIdx
                 if (!AudioEngine.aiSongEngineEnabled) {
                     AudioEngine.aiSongEngineEnabled = true
@@ -1092,6 +1591,7 @@ class MainActivity : AppCompatActivity() {
         seekAiIntensity.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
                 if (!fromUser) return
+                HapticEngine.tick(this@MainActivity)
                 tvAiIntensityVal.text = "$p%"
                 AudioEngine.aiNeuralIntensity = p
                 AudioEngine.saveEngineModes(this@MainActivity)
@@ -1100,6 +1600,59 @@ class MainActivity : AppCompatActivity() {
             override fun onStartTrackingTouch(s: SeekBar?) {}
             override fun onStopTrackingTouch(s: SeekBar?) {}
         })
+
+        // חיבור מצב דיבור חכם (Dialogue Clarity) וכיול שמיעה אישי (Personal Ear Calibration)
+        switchVocalDialogueMode.isChecked = AudioEngine.vocalDialogueModeEnabled
+        seekVocalDialogueStrength.progress = AudioEngine.vocalDialogueStrength
+        tvVocalDialogueVal.text = "${AudioEngine.vocalDialogueStrength}%"
+
+        switchVocalDialogueMode.setOnCheckedChangeListener { _, isChecked ->
+            HapticEngine.click(this)
+            AudioEngine.vocalDialogueModeEnabled = isChecked
+            AudioEngine.saveEngineModes(this)
+            AudioEngine.updateSoundQualityDSP()
+        }
+        seekVocalDialogueStrength.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                tvVocalDialogueVal.text = "$p%"
+                if (fromUser) {
+                    HapticEngine.tick(this@MainActivity)
+                    AudioEngine.vocalDialogueStrength = p
+                    AudioEngine.saveEngineModes(this@MainActivity)
+                    AudioEngine.updateSoundQualityDSP()
+                }
+            }
+            override fun onStartTrackingTouch(s: SeekBar?) {}
+            override fun onStopTrackingTouch(s: SeekBar?) {}
+        })
+
+        switchPersonalCalibration.isChecked = AudioEngine.personalCalibrationEnabled
+        switchPersonalCalibration.setOnCheckedChangeListener { _, isChecked ->
+            HapticEngine.click(this)
+            AudioEngine.personalCalibrationEnabled = isChecked
+            AudioEngine.saveEngineModes(this)
+            AudioEngine.updateSoundQualityDSP()
+        }
+
+        fun runToneCalibrationStep(bandIndex: Int, freqHz: Int, label: String) {
+            HapticEngine.click(this)
+            tvCalibrationStatus.text = "משמיע צליל בדיקה ב-$label ($freqHz Hz)..."
+            ToneCalibrationEngine.playCalibrationTone(freqHz) {
+                val currentBoost = AudioEngine.personalEarOffsetsDb[bandIndex]
+                val nextBoost = if (currentBoost >= 4.0f) 0.5f else currentBoost + 1.0f
+                AudioEngine.personalEarOffsetsDb[bandIndex] = nextBoost
+                AudioEngine.personalCalibrationEnabled = true
+                switchPersonalCalibration.isChecked = true
+                AudioEngine.saveEngineModes(this)
+                AudioEngine.updateSoundQualityDSP()
+                tvCalibrationStatus.text = "כויל $label: פיצוי שמיעה +${String.format("%.1f", nextBoost)} dB"
+                HapticEngine.heavyMilestone(this)
+            }
+        }
+
+        btnToneTestLow.setOnClickListener { runToneCalibrationStep(0, 250, "נמוכים 250Hz") }
+        btnToneTestMid.setOnClickListener { runToneCalibrationStep(1, 1000, "אמצע 1kHz") }
+        btnToneTestHigh.setOnClickListener { runToneCalibrationStep(2, 4000, "גבוהים 4kHz") }
 
         // חיבור Multi-Band Dynamic Limiter
         switchMultiBandLimiter.isChecked = AudioEngine.multiBandLimiterEnabled
@@ -1111,6 +1664,7 @@ class MainActivity : AppCompatActivity() {
         tvMbHighVal.text = "${AudioEngine.mbHighControl}%"
 
         switchMultiBandLimiter.setOnCheckedChangeListener { _, isChecked ->
+            HapticEngine.click(this)
             AudioEngine.multiBandLimiterEnabled = isChecked
             AudioEngine.saveEngineModes(this)
             AudioEngine.updateSoundQualityDSP()
@@ -1119,6 +1673,7 @@ class MainActivity : AppCompatActivity() {
             override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
                 tvMbLowVal.text = "$p%"
                 if (fromUser) {
+                    HapticEngine.tick(this@MainActivity)
                     AudioEngine.mbLowControl = p
                     AudioEngine.saveEngineModes(this@MainActivity)
                     AudioEngine.updateSoundQualityDSP()
@@ -1131,6 +1686,7 @@ class MainActivity : AppCompatActivity() {
             override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
                 tvMbMidVal.text = "$p%"
                 if (fromUser) {
+                    HapticEngine.tick(this@MainActivity)
                     AudioEngine.mbMidControl = p
                     AudioEngine.saveEngineModes(this@MainActivity)
                     AudioEngine.updateSoundQualityDSP()
@@ -1143,6 +1699,7 @@ class MainActivity : AppCompatActivity() {
             override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
                 tvMbHighVal.text = "$p%"
                 if (fromUser) {
+                    HapticEngine.tick(this@MainActivity)
                     AudioEngine.mbHighControl = p
                     AudioEngine.saveEngineModes(this@MainActivity)
                     AudioEngine.updateSoundQualityDSP()
@@ -1153,6 +1710,7 @@ class MainActivity : AppCompatActivity() {
         })
 
         switchEnable.setOnCheckedChangeListener { _, isChecked ->
+            HapticEngine.click(this)
             AudioEngine.setEnabled(isChecked)
             syncVolumeRangeUI()
             refreshHeaderStatusText()
@@ -1160,15 +1718,16 @@ class MainActivity : AppCompatActivity() {
 
         switchAllow300.isChecked = AudioEngine.allow300PercentBoost
         switchAllow300.setOnCheckedChangeListener { _, isChecked ->
+            HapticEngine.click(this)
             AudioEngine.allow300PercentBoost = isChecked
             AudioEngine.saveEngineModes(this)
             syncVolumeRangeUI()
             refreshHeaderStatusText()
         }
 
-        // חיבור מתג Hearing Safe Guard
         switchHearingSafeGuard.isChecked = AudioEngine.hearingSafeGuardEnabled
         switchHearingSafeGuard.setOnCheckedChangeListener { _, isChecked ->
+            HapticEngine.click(this)
             AudioEngine.hearingSafeGuardEnabled = isChecked
             AudioEngine.saveEngineModes(this)
             syncVolumeRangeUI()
@@ -1183,6 +1742,7 @@ class MainActivity : AppCompatActivity() {
                 progressTotalVolume.progress = progress
 
                 if (fromUser && !isUpdatingControlsProgrammatically) {
+                    HapticEngine.tick(this@MainActivity)
                     AudioEngine.applyVolume(this@MainActivity, progress, showNativeSystemUI = false)
                 }
 
@@ -1213,14 +1773,17 @@ class MainActivity : AppCompatActivity() {
         })
 
         findViewById<MaterialButton>(R.id.btnVolMute).setOnClickListener {
+            HapticEngine.click(this)
             seekTotalVolume.progress = 0
             AudioEngine.applyVolume(this, 0, false)
         }
         findViewById<MaterialButton>(R.id.btnVol100).setOnClickListener {
+            HapticEngine.click(this)
             seekTotalVolume.progress = 100
             AudioEngine.applyVolume(this, 100, false)
         }
         findViewById<MaterialButton>(R.id.btnVol150).setOnClickListener {
+            HapticEngine.click(this)
             AudioEngine.activeStreamType = 0
             syncVolumeRangeUI()
             val target = 150.coerceAtMost(AudioEngine.getEffectiveMaxVolume())
@@ -1228,6 +1791,7 @@ class MainActivity : AppCompatActivity() {
             AudioEngine.applyVolume(this, target, false)
         }
         findViewById<MaterialButton>(R.id.btnVol200).setOnClickListener {
+            HapticEngine.click(this)
             AudioEngine.activeStreamType = 0
             syncVolumeRangeUI()
             val target = 200.coerceAtMost(AudioEngine.getEffectiveMaxVolume())
@@ -1235,6 +1799,7 @@ class MainActivity : AppCompatActivity() {
             AudioEngine.applyVolume(this, target, false)
         }
         btnVol300.setOnClickListener {
+            HapticEngine.heavyMilestone(this)
             AudioEngine.activeStreamType = 0
             syncVolumeRangeUI()
             if (AudioEngine.allow300PercentBoost) {
@@ -1245,16 +1810,19 @@ class MainActivity : AppCompatActivity() {
         }
 
         switchAntiClip.setOnCheckedChangeListener { _, isChecked ->
+            HapticEngine.click(this)
             AudioEngine.antiClippingEnabled = isChecked
             AudioEngine.applyVolume(this, AudioEngine.currentTotalVolume, false)
         }
         switchHiRes.setOnCheckedChangeListener { _, isChecked ->
+            HapticEngine.click(this)
             AudioEngine.hiResOptimizerEnabled = isChecked
             AudioEngine.updateSoundQualityDSP()
         }
         seekClarity.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
                 if (!fromUser) return
+                HapticEngine.tick(this@MainActivity)
                 tvClarityValue.text = "$p%"
                 AudioEngine.clarityLevel = p
                 AudioEngine.updateSoundQualityDSP()
@@ -1265,6 +1833,7 @@ class MainActivity : AppCompatActivity() {
         seekWarmth.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
                 if (!fromUser) return
+                HapticEngine.tick(this@MainActivity)
                 tvWarmthValue.text = "$p%"
                 AudioEngine.warmthLevel = p
                 AudioEngine.updateSoundQualityDSP()
@@ -1282,6 +1851,7 @@ class MainActivity : AppCompatActivity() {
         tvSongPunchVal.text = "${AudioEngine.songPunchLevel}%"
 
         switchSongRemaster.setOnCheckedChangeListener { _, isChecked ->
+            HapticEngine.click(this)
             AudioEngine.songRemasterEnabled = isChecked
             AudioEngine.saveEngineModes(this)
             AudioEngine.updateSoundQualityDSP()
@@ -1289,6 +1859,7 @@ class MainActivity : AppCompatActivity() {
         seekSongUpscale.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
                 if (!fromUser) return
+                HapticEngine.tick(this@MainActivity)
                 tvSongUpscaleVal.text = "$p%"
                 AudioEngine.songUpscaleLevel = p
                 AudioEngine.saveEngineModes(this@MainActivity)
@@ -1300,6 +1871,7 @@ class MainActivity : AppCompatActivity() {
         seekSongSep.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
                 if (!fromUser) return
+                HapticEngine.tick(this@MainActivity)
                 tvSongSepVal.text = "$p%"
                 AudioEngine.songSeparationLevel = p
                 AudioEngine.saveEngineModes(this@MainActivity)
@@ -1311,6 +1883,7 @@ class MainActivity : AppCompatActivity() {
         seekSongPunch.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
                 if (!fromUser) return
+                HapticEngine.tick(this@MainActivity)
                 tvSongPunchVal.text = "$p%"
                 AudioEngine.songPunchLevel = p
                 AudioEngine.saveEngineModes(this@MainActivity)
@@ -1324,6 +1897,7 @@ class MainActivity : AppCompatActivity() {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 tvBassValue.text = "${progress / 10}%"
                 if (fromUser) {
+                    HapticEngine.tick(this@MainActivity)
                     runCatching { AudioEngine.bassBoost?.setStrength(progress.toShort()) }
                 }
             }
@@ -1335,6 +1909,7 @@ class MainActivity : AppCompatActivity() {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 tvVirtualizerValue.text = "${progress / 10}%"
                 if (fromUser) {
+                    HapticEngine.tick(this@MainActivity)
                     runCatching { AudioEngine.virtualizer?.setStrength(progress.toShort()) }
                 }
             }
@@ -1347,6 +1922,7 @@ class MainActivity : AppCompatActivity() {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 tvReverbValue.text = reverbNames.getOrElse(progress) { "ללא" }
                 if (fromUser) {
+                    HapticEngine.click(this@MainActivity)
                     runCatching { AudioEngine.presetReverb?.preset = progress.toShort() }
                 }
             }
@@ -1354,7 +1930,7 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(s: SeekBar?) {}
         })
 
-        // בניית אקולייזר פרמטרי מורחב 10 ערוצים (31Hz עד 16kHz) + Q-Factor
+        // בניית אקולייזר פרמטרי מורחב 10 ערוצים + Q-Factor
         seekParametricQ.progress = AudioEngine.parametricQFactorProgress
         val initQ = String.format("%.1f", 0.4f + (AudioEngine.parametricQFactorProgress / 10f))
         tvParametricQValue.text = "Q: $initQ"
@@ -1364,6 +1940,7 @@ class MainActivity : AppCompatActivity() {
                 val qVal = String.format("%.1f", 0.4f + (p / 10f))
                 tvParametricQValue.text = "Q: $qVal"
                 if (fromUser) {
+                    HapticEngine.tick(this@MainActivity)
                     AudioEngine.parametricQFactorProgress = p
                     AudioEngine.saveEngineModes(this@MainActivity)
                     AudioEngine.updateSoundQualityDSP()
@@ -1403,7 +1980,6 @@ class MainActivity : AppCompatActivity() {
             rowHeader.addView(tvFreq)
             rowHeader.addView(tvDb)
 
-            // טווח 0..30 המייצג -15dB עד +15dB (אמצע = 15)
             val seekBar = SeekBar(this).apply {
                 max = 30
                 progress = (savedGainDb + 15).coerceIn(0, 30)
@@ -1415,6 +1991,7 @@ class MainActivity : AppCompatActivity() {
                         val dbVal = p - 15
                         tvDb.text = if (dbVal > 0) "+$dbVal dB" else "$dbVal dB"
                         if (fromUser) {
+                            HapticEngine.tick(this@MainActivity)
                             AudioEngine.parametricBandGainsDb[bandIdx] = dbVal.toFloat()
                             AudioEngine.saveEngineModes(this@MainActivity)
                             AudioEngine.updateSoundQualityDSP()
@@ -1431,15 +2008,19 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<MaterialButton>(R.id.btnPresetNormal).setOnClickListener {
+            HapticEngine.click(this)
             applyPreset(listOf(0, 0, 0, 0, 0, 0, 0, 0, 0, 0), bass = 0, surround = 0, reverb = 0)
         }
         findViewById<MaterialButton>(R.id.btnPresetBass).setOnClickListener {
+            HapticEngine.click(this)
             applyPreset(listOf(9, 8, 6, 3, 0, 0, 1, 2, 3, 4), bass = 700, surround = 250, reverb = 1)
         }
         findViewById<MaterialButton>(R.id.btnPresetVocal).setOnClickListener {
+            HapticEngine.click(this)
             applyPreset(listOf(-3, -2, 0, 2, 5, 7, 7, 5, 3, 2), bass = 100, surround = 200, reverb = 1)
         }
         findViewById<MaterialButton>(R.id.btnPresetGaming).setOnClickListener {
+            HapticEngine.click(this)
             applyPreset(listOf(6, 5, 3, 0, -1, 2, 6, 8, 9, 8), bass = 500, surround = 900, reverb = 3)
         }
 
@@ -1457,6 +2038,7 @@ class MainActivity : AppCompatActivity() {
                 return handled
             } else {
                 if (event.action == KeyEvent.ACTION_DOWN) {
+                    HapticEngine.tick(this)
                     val maxAllowed = AudioEngine.getEffectiveMaxVolume()
                     val delta = if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) 6 else -6
                     val next = (AudioEngine.currentTotalVolume + delta).coerceIn(0, maxAllowed)
@@ -1492,7 +2074,7 @@ class MainActivity : AppCompatActivity() {
 }
 
 // =========================================================================
-// 3. שירות הגברת עוצמת הקול דרך מחוון המערכת המקורי בלבד (Native SystemUI)
+// 3. שירות הגברת עוצמת הקול דרך מחוון המערכת + בועית HD נגררת + זיהוי Per-App
 // =========================================================================
 class VolumeOverlayService : AccessibilityService() {
 
@@ -1505,10 +2087,17 @@ class VolumeOverlayService : AccessibilityService() {
     private var maxSysVol = 15
 
     private var badgeView: TextView? = null
+    private var badgeParams: WindowManager.LayoutParams? = null
+    private var dragInitialX = 0
+    private var dragInitialY = 0
+    private var dragTouchStartX = 0f
+    private var dragTouchStartY = 0f
 
     private val hideHandler = Handler(Looper.getMainLooper())
     private val hideRunnable = Runnable {
-        removeBadge()
+        if (!AudioEngine.alwaysShowDraggableMiniPill) {
+            removeBadge()
+        }
     }
 
     private val volumeKeyHandler = Handler(Looper.getMainLooper())
@@ -1536,6 +2125,9 @@ class VolumeOverlayService : AccessibilityService() {
             audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
             maxSysVol = audioManager?.getStreamMaxVolume(AudioManager.STREAM_MUSIC)?.coerceAtLeast(1) ?: 15
             AudioEngine.init(this)
+            if (AudioEngine.alwaysShowDraggableMiniPill) {
+                showNativeBadgeIfNeeded()
+            }
         }
     }
 
@@ -1560,6 +2152,7 @@ class VolumeOverlayService : AccessibilityService() {
 
         if (keyCode == KeyEvent.KEYCODE_VOLUME_MUTE) {
             if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                HapticEngine.click(this)
                 val next = if (AudioEngine.currentTotalVolume > 0) 0 else 60
                 AudioEngine.applyVolume(this, next, showNativeSystemUI = true)
                 showNativeBadgeIfNeeded()
@@ -1579,7 +2172,7 @@ class VolumeOverlayService : AccessibilityService() {
                     volDownDownTimestamp = now
                 }
 
-                if (isVolUpPressed && isVolDownPressed && kotlin.math.abs(volUpDownTimestamp - volDownDownTimestamp) < 250L) {
+                if (isVolUpPressed && isVolDownPressed && abs(volUpDownTimestamp - volDownDownTimestamp) < 250L) {
                     cancelVolumeHold()
                     return false
                 }
@@ -1615,6 +2208,7 @@ class VolumeOverlayService : AccessibilityService() {
     }
 
     private fun stepVolumeInDirection(direction: Int, stepAmount: Int) {
+        HapticEngine.tick(this)
         AudioEngine.refreshBluetoothAndStreamState(this)
         val maxAllowed = AudioEngine.getEffectiveMaxVolume()
 
@@ -1632,20 +2226,16 @@ class VolumeOverlayService : AccessibilityService() {
         return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, resources.displayMetrics).roundToInt()
     }
 
-    private fun showNativeBadgeIfNeeded() {
+    @SuppressLint("ClickableViewAccessibility")
+    fun showNativeBadgeIfNeeded() {
         hideHandler.removeCallbacks(hideRunnable)
-        if (AudioEngine.currentTotalVolume <= 100) {
+        if (AudioEngine.currentTotalVolume <= 100 && !AudioEngine.alwaysShowDraggableMiniPill) {
             removeBadge()
             return
         }
         val wm = windowManager ?: return
 
         if (badgeView == null) {
-            badgeView = TextView(this).apply {
-                gravity = Gravity.CENTER
-                elevation = dp(6f).toFloat()
-            }
-
             val params = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.WRAP_CONTENT,
@@ -1656,8 +2246,59 @@ class VolumeOverlayService : AccessibilityService() {
                 PixelFormat.TRANSLUCENT
             ).apply {
                 gravity = Gravity.END or Gravity.CENTER_VERTICAL
-                x = dp(12f)
-                y = -dp(155f)
+                x = AudioEngine.pillPosX
+                y = AudioEngine.pillPosY
+            }
+            badgeParams = params
+
+            badgeView = TextView(this).apply {
+                gravity = Gravity.CENTER
+                elevation = dp(8f).toFloat()
+                // תמיכה בגרירה חופשית של בועית ה-HD לכל מקום במסך + לחיצה להחלפת ערוץ!
+                setOnTouchListener { v, ev ->
+                    val lp = badgeParams ?: return@setOnTouchListener false
+                    when (ev.actionMasked) {
+                        MotionEvent.ACTION_DOWN -> {
+                            hideHandler.removeCallbacks(hideRunnable)
+                            dragInitialX = lp.x
+                            dragInitialY = lp.y
+                            dragTouchStartX = ev.rawX
+                            dragTouchStartY = ev.rawY
+                            true
+                        }
+                        MotionEvent.ACTION_MOVE -> {
+                            val dx = (dragTouchStartX - ev.rawX).roundToInt()
+                            val dy = (ev.rawY - dragTouchStartY).roundToInt()
+                            lp.x = dragInitialX + dx
+                            lp.y = dragInitialY + dy
+                            AudioEngine.pillPosX = lp.x
+                            AudioEngine.pillPosY = lp.y
+                            runCatching { wm.updateViewLayout(v, lp) }
+                            true
+                        }
+                        MotionEvent.ACTION_UP -> {
+                            val movedDist = abs(ev.rawX - dragTouchStartX) + abs(ev.rawY - dragTouchStartY)
+                            if (movedDist < dp(10f)) {
+                                HapticEngine.click(this@VolumeOverlayService)
+                                AudioEngine.cycleNextStream(this@VolumeOverlayService)
+                                showNativeBadgeIfNeeded()
+                                Toast.makeText(
+                                    this@VolumeOverlayService,
+                                    "ערוץ פעיל: ${AudioEngine.getActiveStreamHebrewLabel()}",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            } else {
+                                HapticEngine.tick(this@VolumeOverlayService)
+                                AudioEngine.saveEngineModes(this@VolumeOverlayService)
+                            }
+                            if (!AudioEngine.alwaysShowDraggableMiniPill) {
+                                hideHandler.postDelayed(hideRunnable, 2800)
+                            }
+                            true
+                        }
+                        else -> false
+                    }
+                }
             }
             runCatching { wm.addView(badgeView, params) }
         }
@@ -1666,18 +2307,21 @@ class VolumeOverlayService : AccessibilityService() {
         val padV = dp(9f)
         val btMark = if (AudioEngine.isBluetoothConnected) " ᛒ" else ""
         val safeGuardMark = if (AudioEngine.hearingSafeGuardEnabled && AudioEngine.isHeadphonesActive()) " 🛡️" else ""
+        val dlgMark = if (AudioEngine.vocalDialogueModeEnabled) " 🎙️" else ""
         badgeView?.apply {
             setPadding(padH, padV, padH, padV)
             textSize = 13f
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#EEF2F6"))
+                setColor(Color.parseColor("#161B26"))
                 cornerRadius = dp(24f).toFloat()
-                setStroke(dp(2f), Color.parseColor("#3B607A"))
+                setStroke(dp(2f), Color.parseColor("#00E676"))
             }
-            setTextColor(Color.parseColor("#1B2C38"))
-            text = "${AudioEngine.currentTotalVolume}% HD$btMark$safeGuardMark"
+            setTextColor(Color.parseColor("#00E676"))
+            text = "${AudioEngine.currentTotalVolume}% HD$btMark$safeGuardMark$dlgMark"
         }
-        hideHandler.postDelayed(hideRunnable, 2800)
+        if (!AudioEngine.alwaysShowDraggableMiniPill) {
+            hideHandler.postDelayed(hideRunnable, 2800)
+        }
     }
 
     private fun removeBadge() {
@@ -1689,11 +2333,15 @@ class VolumeOverlayService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val pkg = event?.packageName?.toString() ?: ""
-        if (pkg.contains("systemui", ignoreCase = true)) {
-            val cls = event?.className?.toString() ?: ""
-            if (cls.contains("Screenshot", ignoreCase = true) || cls.contains("GlobalActions", ignoreCase = true)) {
-                cancelVolumeHold()
-                removeBadge()
+        if (pkg.isNotEmpty()) {
+            if (pkg.contains("systemui", ignoreCase = true)) {
+                val cls = event?.className?.toString() ?: ""
+                if (cls.contains("Screenshot", ignoreCase = true) || cls.contains("GlobalActions", ignoreCase = true)) {
+                    cancelVolumeHold()
+                    removeBadge()
+                }
+            } else if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                AudioEngine.onForegroundAppDetected(this, pkg)
             }
         }
     }
@@ -1706,6 +2354,70 @@ class VolumeOverlayService : AccessibilityService() {
         hideHandler.removeCallbacksAndMessages(null)
         removeBadge()
         instance = null
+    }
+}
+
+// =========================================================================
+// 4. אריח הגדרות מהירות בווילון ההתראות (Quick Settings Tile)
+// =========================================================================
+class BoosterTileService : TileService() {
+    override fun onStartListening() {
+        super.onStartListening()
+        AudioEngine.init(this)
+        syncTileVisual()
+    }
+
+    override fun onClick() {
+        super.onClick()
+        HapticEngine.click(this)
+        val nextVolume = when {
+            !AudioEngine.isBoosterActive -> {
+                AudioEngine.setEnabled(true)
+                150
+            }
+            AudioEngine.currentTotalVolume < 150 -> 150
+            AudioEngine.currentTotalVolume < 200 -> 200
+            else -> 100
+        }
+        AudioEngine.applyVolume(this, nextVolume, showNativeSystemUI = true)
+        VolumeOverlayService.instance?.showNativeBadgeIfNeeded()
+        syncTileVisual()
+    }
+
+    private fun syncTileVisual() {
+        val tile = qsTile ?: return
+        tile.state = if (AudioEngine.isBoosterActive) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
+        tile.label = "Sound Booster (${AudioEngine.currentTotalVolume}%)"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            tile.subtitle = if (AudioEngine.currentTotalVolume > 100) "Turbo HD Boost" else "Normal 100%"
+        }
+        tile.updateTile()
+    }
+}
+
+// =========================================================================
+// 5. מקלט אוטומציה חיצונית (Intent / Tasker / Routines API)
+// =========================================================================
+class AutomationReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent?) {
+        val act = intent?.action ?: return
+        AudioEngine.init(context)
+        when (act) {
+            "com.example.soundbooster.ACTION_SET_BOOST" -> {
+                val targetVol = intent.getIntExtra("volume", 150)
+                val routeMode = intent.getIntExtra("route_profile", -1)
+                if (routeMode in 0..4) {
+                    AudioEngine.selectedRoutingProfileMode = routeMode
+                }
+                AudioEngine.setEnabled(true)
+                AudioEngine.applyVolume(context, targetVol, showNativeSystemUI = true)
+                AudioEngine.saveEngineModes(context)
+            }
+            "com.example.soundbooster.ACTION_TOGGLE_BOOSTER" -> {
+                AudioEngine.setEnabled(!AudioEngine.isBoosterActive)
+                AudioEngine.applyVolume(context, AudioEngine.currentTotalVolume, showNativeSystemUI = true)
+            }
+        }
     }
 }
  
